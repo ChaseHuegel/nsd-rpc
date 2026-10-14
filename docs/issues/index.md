@@ -17,7 +17,7 @@ add or work an issue.
 - [x] [Add RpcPeer, the protocol engine](/docs/issues/0004-rpc-peer-engine.md) — correlation, timeouts, cancellation, and faults.
 - [x] [Add the handler API, registry, and dispatcher](/docs/issues/0005-rpc-handler-dispatch.md) — attributes, scanning, results, and payload codecs.
 - [x] [Add RpcClient and RpcServer composition](/docs/issues/0006-rpc-client-server.md) — the two composition roots and their lifecycle.
-- [ ] [Add the NsdRpc.Tcp transport project](/docs/issues/0007-tcp-transport.md) — framing, sockets, and the handshake.
+- [x] [Add the NsdRpc.Tcp transport project](/docs/issues/0007-tcp-transport.md) — framing, sockets, and the handshake.
 - [ ] [Prove streaming and cancellation end to end](/docs/issues/0008-rpc-streaming-cancellation.md) — chunks, keep-alive, and every cancellation case.
 
 ### Research

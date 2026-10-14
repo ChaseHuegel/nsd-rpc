@@ -17,4 +17,10 @@ public interface IRpcConnection
 
     /// <summary>Fires once when the connection dies. The peer faults pending calls.</summary>
     event Action Disconnected;
+
+    /// <summary>
+    /// Fires from the transport's receive loop for each complete frame. The
+    /// span is only valid during the call. Pull-based transports never fire it.
+    /// </summary>
+    event RpcFrameHandler FrameReceived;
 }

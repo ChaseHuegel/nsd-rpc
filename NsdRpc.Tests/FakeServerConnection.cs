@@ -24,6 +24,12 @@ internal sealed class FakeServerConnection : IServerConnection
         remove => _inner.Disconnected -= value;
     }
 
+    public event RpcFrameHandler FrameReceived
+    {
+        add => _inner.FrameReceived += value;
+        remove => _inner.FrameReceived -= value;
+    }
+
     public bool TrySend(ReadOnlySpan<byte> frame)
     {
         return _inner.TrySend(frame);

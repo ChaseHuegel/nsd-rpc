@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NsdRpc", "NsdRpc\NsdRpc.csp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NsdRpc.Tests", "NsdRpc.Tests\NsdRpc.Tests.csproj", "{63D22AE1-01BA-4832-8137-8FD49F0AD824}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NsdRpc.Tcp", "NsdRpc.Tcp\NsdRpc.Tcp.csproj", "{926A9D7E-D963-4A19-B55D-93641992A658}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -41,6 +43,18 @@ Global
 		{63D22AE1-01BA-4832-8137-8FD49F0AD824}.Release|x64.Build.0 = Release|Any CPU
 		{63D22AE1-01BA-4832-8137-8FD49F0AD824}.Release|x86.ActiveCfg = Release|Any CPU
 		{63D22AE1-01BA-4832-8137-8FD49F0AD824}.Release|x86.Build.0 = Release|Any CPU
+		{926A9D7E-D963-4A19-B55D-93641992A658}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{926A9D7E-D963-4A19-B55D-93641992A658}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{926A9D7E-D963-4A19-B55D-93641992A658}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{926A9D7E-D963-4A19-B55D-93641992A658}.Debug|x64.Build.0 = Debug|Any CPU
+		{926A9D7E-D963-4A19-B55D-93641992A658}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{926A9D7E-D963-4A19-B55D-93641992A658}.Debug|x86.Build.0 = Debug|Any CPU
+		{926A9D7E-D963-4A19-B55D-93641992A658}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{926A9D7E-D963-4A19-B55D-93641992A658}.Release|Any CPU.Build.0 = Release|Any CPU
+		{926A9D7E-D963-4A19-B55D-93641992A658}.Release|x64.ActiveCfg = Release|Any CPU
+		{926A9D7E-D963-4A19-B55D-93641992A658}.Release|x64.Build.0 = Release|Any CPU
+		{926A9D7E-D963-4A19-B55D-93641992A658}.Release|x86.ActiveCfg = Release|Any CPU
+		{926A9D7E-D963-4A19-B55D-93641992A658}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

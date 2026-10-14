@@ -123,10 +123,10 @@ public sealed class RpcDispatcherTests
 
         // Field id 0 announces a 4-byte int that never arrives. Truncated.
         var envelope = new Envelope(1, (byte)RpcMessageKind.Request, 1UL, 5UL, [0, 0], null);
-        server.HandleFrame(envelope.Serialize());
+        RpcTestHelpers.Deliver(server, in envelope);
         await gate.Task;
 
-        Envelope decoded = Envelope.Deserialize((ReadOnlySpan<byte>)serverConn.SentFrames[0]);
+        Envelope decoded = Envelope.Deserialize((ReadOnlySpan<byte>)serverConn.SentFrames[0].AsSpan(4));
         Assert.Equal((byte)RpcMessageKind.Response, decoded.Kind);
         Assert.NotNull(decoded.Error);
         Assert.Equal((int)RpcErrorCode.InvalidParams, decoded.Error.Value.Code);
@@ -189,7 +189,7 @@ public sealed class RpcDispatcherTests
         await handler.Started.Task;
 
         var cancellation = new Envelope(1, (byte)RpcMessageKind.Cancellation, 1UL, 0UL, null, null);
-        server.HandleFrame(cancellation.Serialize());
+        RpcTestHelpers.Deliver(server, in cancellation);
 
         Assert.True(handler.Captured.IsCancellationRequested);
         Assert.False(call.IsCompleted);
@@ -246,10 +246,10 @@ public sealed class RpcDispatcherTests
         TaskCompletionSource gate = RpcTestHelpers.AttachDispatcher(server, registry);
 
         var envelope = new Envelope(1, (byte)RpcMessageKind.Request, 1UL, 5UL, null, null);
-        server.HandleFrame(envelope.Serialize());
+        RpcTestHelpers.Deliver(server, in envelope);
         await gate.Task;
 
-        Envelope decoded = Envelope.Deserialize((ReadOnlySpan<byte>)serverConn.SentFrames[0]);
+        Envelope decoded = Envelope.Deserialize((ReadOnlySpan<byte>)serverConn.SentFrames[0].AsSpan(4));
         Assert.Null(decoded.Error);
         Assert.NotNull(decoded.Payload);
         Handshake payload = Handshake.Deserialize((ReadOnlySpan<byte>)decoded.Payload);
@@ -294,17 +294,17 @@ public sealed class RpcDispatcherTests
         TaskCompletionSource gate = RpcTestHelpers.AttachDispatcher(client, registry);
 
         var serverToClient = new Envelope(1, (byte)RpcMessageKind.Request, 1UL, 11UL, null, null);
-        client.HandleFrame(serverToClient.Serialize());
+        RpcTestHelpers.Deliver(client, in serverToClient);
         await gate.Task;
-        Assert.Null(Envelope.Deserialize((ReadOnlySpan<byte>)clientConn.SentFrames[0]).Error);
+        Assert.Null(Envelope.Deserialize((ReadOnlySpan<byte>)clientConn.SentFrames[0].AsSpan(4)).Error);
 
         TaskCompletionSource secondGate = RpcTestHelpers.AttachDispatcher(client, registry);
         var clientToServer = new Envelope(1, (byte)RpcMessageKind.Request, 2UL, 10UL, null, null);
-        client.HandleFrame(clientToServer.Serialize());
+        RpcTestHelpers.Deliver(client, in clientToServer);
         await secondGate.Task;
         Assert.Equal(
             (int)RpcErrorCode.MethodNotFound,
-            Envelope.Deserialize((ReadOnlySpan<byte>)clientConn.SentFrames[1]).Error!.Value.Code);
+            Envelope.Deserialize((ReadOnlySpan<byte>)clientConn.SentFrames[1].AsSpan(4)).Error!.Value.Code);
     }
 
     [Fact]

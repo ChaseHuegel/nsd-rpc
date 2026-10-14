@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../NsdRpc/NsdRpc.csproj" />
+    <ProjectReference Include="..\NsdRpc.Tcp\NsdRpc.Tcp.csproj" />
   </ItemGroup>
 
 </Project>

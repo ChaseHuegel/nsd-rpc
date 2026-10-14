@@ -8,10 +8,11 @@ container structure and where each piece goes. Update it as code lands.
 | Project | Path | Role |
 |---|---|---|
 | NsdRpc | [NsdRpc/NsdRpc.csproj](../../NsdRpc/NsdRpc.csproj) | The library. Zero dependencies. Ships as the `NsdRpc` NuGet package. |
-| NsdRpc.Tests | [NsdRpc.Tests/NsdRpc.Tests.csproj](../../NsdRpc.Tests/NsdRpc.Tests.csproj) | xunit tests. References the library. Not packed. |
-| Solution | [NsdRpc.sln](../../NsdRpc.sln) | Contains both projects. |
+| NsdRpc.Tcp | [NsdRpc.Tcp/NsdRpc.Tcp.csproj](../../NsdRpc.Tcp/NsdRpc.Tcp.csproj) | The TCP transport: framing, sockets, and the handshake. References the core. Zero dependencies. |
+| NsdRpc.Tests | [NsdRpc.Tests/NsdRpc.Tests.csproj](../../NsdRpc.Tests/NsdRpc.Tests.csproj) | xunit tests. References both libraries. Not packed. |
+| Solution | [NsdRpc.sln](../../NsdRpc.sln) | Contains all projects. |
 
-The library targets `netstandard2.1;net10.0`. Tests target `net10.0`.
+The libraries target `netstandard2.1;net10.0`. Tests target `net10.0`.
 
 ## Build pipeline
 
@@ -51,6 +52,7 @@ analysis gate. See [specs/coding-style](specs/coding-style.md).
 | Engine | `NsdRpc/Engine/` | The peer, correlation, timeouts, cancellation, faults, and payload codecs. |
 | Handlers | `NsdRpc/Handlers/` | The method attribute, handler interface, registry, and dispatcher. |
 | Composition | `NsdRpc/RpcClient.cs`, `NsdRpc/RpcServer.cs` | The client and server roots that bind a peer, a transport, and a registry. |
+| Tcp transport | `NsdRpc.Tcp/` | The frame decoder, socket engine, connections, and the handshake. |
 | Invariant | `NsdRpc/Invariant.cs` | The always-on assert helper. |
 
 ## CI

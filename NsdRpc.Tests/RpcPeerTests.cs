@@ -27,7 +27,7 @@ public sealed class RpcPeerTests
         var envelopes = new List<Envelope>(frames.Count);
         foreach (byte[] frame in frames)
         {
-            envelopes.Add(Envelope.Deserialize((ReadOnlySpan<byte>)frame));
+            envelopes.Add(Envelope.Deserialize((ReadOnlySpan<byte>)frame.AsSpan(4)));
         }
 
         return envelopes;
@@ -123,7 +123,7 @@ public sealed class RpcPeerTests
         Task<RpcResult<Handshake>> call = client.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1));
 
         var envelope = new Envelope(1, (byte)RpcMessageKind.Response, 999UL, 0UL, null, null);
-        client.HandleFrame(envelope.Serialize());
+        RpcTestHelpers.Deliver(client, in envelope);
 
         Assert.False(call.IsCompleted);
     }
@@ -162,7 +162,7 @@ public sealed class RpcPeerTests
         Task<RpcResult<Handshake>> call = client.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1));
 
         var envelope = new Envelope(1, (byte)RpcMessageKind.Response, 0UL, 0UL, null, null);
-        client.HandleFrame(envelope.Serialize());
+        RpcTestHelpers.Deliver(client, in envelope);
 
         Assert.False(call.IsCompleted);
     }
@@ -369,14 +369,14 @@ public sealed class RpcPeerTests
         await gate.Task;
 
         var cancelEnvelope = new Envelope(1, (byte)RpcMessageKind.Cancellation, 1UL, 0UL, null, null);
-        server.HandleFrame(cancelEnvelope.Serialize());
+        RpcTestHelpers.Deliver(server, in cancelEnvelope);
 
         captured.Respond(RpcResult<Handshake>.Success(new Handshake(9)));
         Pump(clientConn, client);
 
         Assert.DoesNotContain(
             serverConn.SentFrames,
-            frame => Envelope.Deserialize((ReadOnlySpan<byte>)frame).Kind == (byte)RpcMessageKind.Response);
+            frame => Envelope.Deserialize((ReadOnlySpan<byte>)frame.AsSpan(4)).Kind == (byte)RpcMessageKind.Response);
     }
 
     [Fact]
@@ -435,7 +435,7 @@ public sealed class RpcPeerTests
         Task<RpcResult<Handshake>> call = client.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1));
 
         var envelope = new Envelope(2, (byte)RpcMessageKind.Request, 1UL, EchoMethod, null, null);
-        client.HandleFrame(envelope.Serialize());
+        RpcTestHelpers.Deliver(client, in envelope);
 
         RpcResult<Handshake> result = await call;
         Assert.Equal((int)RpcErrorCode.Unavailable, result.ErrorCode);
@@ -456,7 +456,7 @@ public sealed class RpcPeerTests
         };
 
         var envelope = new Envelope(1, 9, 1UL, EchoMethod, null, null);
-        client.HandleFrame(envelope.Serialize());
+        RpcTestHelpers.Deliver(client, in envelope);
 
         Task<RpcResult<Handshake>> call = client.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(7));
         Pump(serverConn, server);
@@ -481,10 +481,10 @@ public sealed class RpcPeerTests
         };
 
         var invalid = new Envelope(1, (byte)RpcMessageKind.Request, 0UL, EchoMethod, null, null);
-        peer.HandleFrame(invalid.Serialize());
+        RpcTestHelpers.Deliver(peer, in invalid);
 
         var valid = new Envelope(1, (byte)RpcMessageKind.Request, 1UL, EchoMethod, null, null);
-        peer.HandleFrame(valid.Serialize());
+        RpcTestHelpers.Deliver(peer, in valid);
         await gate.Task;
 
         Assert.Equal(1, hookCalls);
@@ -506,7 +506,7 @@ public sealed class RpcPeerTests
         now = 4_000_000_000;
         var chunk = new Envelope(
             1, (byte)RpcMessageKind.Notification, 1UL, EchoMethod, new Handshake(2).Serialize(), null);
-        peer.HandleFrame(chunk.Serialize());
+        RpcTestHelpers.Deliver(peer, in chunk);
 
         now = 6_000_000_000;
         peer.CheckTimeouts(now);
@@ -573,7 +573,7 @@ public sealed class RpcPeerTests
 
         var chunk = new Envelope(
             1, (byte)RpcMessageKind.Notification, 1UL, EchoMethod, new Handshake(2).Serialize(), null);
-        client.HandleFrame(chunk.Serialize());
+        RpcTestHelpers.Deliver(client, in chunk);
 
         Assert.Empty(sink.Chunks);
     }
@@ -594,7 +594,7 @@ public sealed class RpcPeerTests
 
         var notification = new Envelope(
             1, (byte)RpcMessageKind.Notification, 0UL, EchoMethod, new Handshake(4).Serialize(), null);
-        peer.HandleFrame(notification.Serialize());
+        RpcTestHelpers.Deliver(peer, in notification);
         await gate.Task;
 
         Assert.Equal(0UL, captured.RequestId);
@@ -699,7 +699,7 @@ public sealed class RpcPeerTests
         // The worker awaits the blocked handler. A chunk still reaches the sink.
         var chunk = new Envelope(
             1, (byte)RpcMessageKind.Notification, 1UL, EchoMethod, new Handshake(2).Serialize(), null);
-        client.HandleFrame(chunk.Serialize());
+        RpcTestHelpers.Deliver(client, in chunk);
         Assert.Single(sink.Chunks);
 
         blocker.SetResult();

@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using NsdRpc;
 using NsdRpc.Wire;
 
@@ -19,6 +20,16 @@ internal static class RpcTestHelpers
         {
             into.HandleFrame(frame);
         }
+    }
+
+    // Frames one envelope and delivers it directly to a peer's HandleFrame.
+    public static void Deliver(RpcPeer peer, in Envelope envelope)
+    {
+        int size = envelope.GetSize();
+        byte[] frame = new byte[4 + size];
+        BinaryPrimitives.WriteInt32LittleEndian(frame, size);
+        envelope.SerializeInto(frame.AsSpan(4, size));
+        peer.HandleFrame(frame);
     }
 
     // Wires a dispatcher that signals the gate when one dispatch completes.

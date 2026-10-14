@@ -10,6 +10,7 @@ internal sealed class InMemoryConnection : IRpcConnection
     private readonly object _inboxLock = new();
     private readonly Queue<byte[]> _inbox = new();
     private Action? _disconnectedHandlers;
+    private RpcFrameHandler? _frameReceivedHandlers;
     private bool _disconnected;
 
     public InMemoryConnection? Peer { get; set; }
@@ -26,6 +27,12 @@ internal sealed class InMemoryConnection : IRpcConnection
     {
         add => _disconnectedHandlers += value;
         remove => _disconnectedHandlers -= value;
+    }
+
+    public event RpcFrameHandler FrameReceived
+    {
+        add => _frameReceivedHandlers += value;
+        remove => _frameReceivedHandlers -= value;
     }
 
     public bool TrySend(ReadOnlySpan<byte> frame)

@@ -81,7 +81,7 @@ public sealed class RpcClientTests
         bool sent = client.Notify(200, new Handshake(1));
 
         Assert.True(sent);
-        Envelope frame = Envelope.Deserialize((ReadOnlySpan<byte>)clientConn.SentFrames[0]);
+        Envelope frame = Envelope.Deserialize((ReadOnlySpan<byte>)clientConn.SentFrames[0].AsSpan(4));
         Assert.Equal((byte)RpcMessageKind.Notification, frame.Kind);
         Assert.Equal(200UL, frame.Method);
     }

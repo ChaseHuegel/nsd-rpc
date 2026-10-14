@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using NsdRpc.Wire;
@@ -48,6 +49,7 @@ public sealed class RpcPeer
         _clientId = (connection as IServerConnection)?.ClientId ?? 0UL;
         _expiredScratch = new PendingCallBase[_options.MaxPendingCalls];
         _connection.Disconnected += OnDisconnected;
+        _connection.FrameReceived += HandleFrame;
     }
 
     internal IRpcConnection Connection => _connection;
@@ -227,10 +229,23 @@ public sealed class RpcPeer
             return;
         }
 
+        if (frame.Length < 4)
+        {
+            RpcLog.Drop("frame without a length prefix");
+            return;
+        }
+
+        int length = BinaryPrimitives.ReadInt32LittleEndian(frame);
+        if (length <= 0 || length != frame.Length - 4)
+        {
+            RpcLog.Drop("frame length mismatch");
+            return;
+        }
+
         Envelope envelope;
         try
         {
-            envelope = Envelope.Deserialize(frame);
+            envelope = Envelope.Deserialize(frame.Slice(4, length));
         }
         catch (InvalidDataException)
         {
@@ -595,8 +610,9 @@ public sealed class RpcPeer
 
     private static int FrameSizeFor(int payloadLength)
     {
-        // 26 required envelope bytes plus 5 bytes of payload field overhead.
-        return checked(26 + 5 + payloadLength);
+        // 4-byte length prefix, 26 required envelope bytes, and 5 bytes of
+        // payload field overhead.
+        return checked(4 + 26 + 5 + payloadLength);
     }
 
     private static Task<RpcResult<T>> FailedTask<T>(int errorCode, string errorMessage)
@@ -621,17 +637,18 @@ public sealed class RpcPeer
     private bool SendEnvelope(in Envelope envelope)
     {
         int size = envelope.GetSize();
-        if (size > _options.MaxFrameBytes)
+        if (4 + size > _options.MaxFrameBytes)
         {
             RpcLog.Drop("frame exceeds MaxFrameBytes");
             return false;
         }
 
-        byte[] frame = ArrayPool<byte>.Shared.Rent(size);
+        byte[] frame = ArrayPool<byte>.Shared.Rent(4 + size);
         try
         {
-            envelope.SerializeInto(frame.AsSpan(0, size));
-            return _connection.TrySend(frame.AsSpan(0, size));
+            BinaryPrimitives.WriteInt32LittleEndian(frame, size);
+            envelope.SerializeInto(frame.AsSpan(4, size));
+            return _connection.TrySend(frame.AsSpan(0, 4 + size));
         }
         finally
         {

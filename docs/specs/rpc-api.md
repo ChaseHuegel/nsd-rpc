@@ -2,9 +2,8 @@
 
 One subject: the API of the RPC library. Read
 [rpc-protocol](rpc-protocol.md) for the wire contract. The transport, engine,
-handler layers, and the two composition roots landed. Issues
-[0007](../issues/0007-tcp-transport.md) through
-[0008](../issues/0008-rpc-streaming-cancellation.md) build the rest.
+handler layers, the two composition roots, and the TCP transport landed.
+Issue [0008](../issues/0008-rpc-streaming-cancellation.md) builds the rest.
 
 ## Layers
 
@@ -28,6 +27,7 @@ public interface IRpcConnection
     bool IsConnected { get; }
     bool TrySend(ReadOnlySpan<byte> frame);
     event Action Disconnected;
+    event RpcFrameHandler FrameReceived;
 }
 
 public interface IClientConnection : IRpcConnection
@@ -52,10 +52,13 @@ Rules:
 
 - `TrySend` copies the frame before it returns. It returns false when the
   frame was rejected: a closed connection or a full queue.
-- `Disconnected` fires once. The peer faults every pending call.
+- `FrameReceived` fires for each complete frame from the transport's receive
+  loop. The span is only valid during the call. Pull-based transports never
+  fire it.
 - A frame is a 4-byte little-endian length prefix and the envelope bytes. The
-  frame codec lives in the `NsdRpc.Tcp` project. Custom transports implement
-  their own framing.
+  peer builds the prefix on sends and validates it on receives. The
+  `NsdRpc.Tcp` decoder enforces the bound while accumulating. Custom
+  transports implement their own framing.
 - `ClientId` comes from the server transport at accept. It is never 0. It is
   0 on the client side.
 
@@ -130,11 +133,11 @@ Engine rules:
 - A failed send completes the call with `Unavailable`.
 - `FaultPending` completes every pending call with the given error. It runs
   on disconnect and cleanup.
-- The transport calls `HandleFrame` from its receive loop. The transport or
-  the host calls `CheckTimeouts` with a timestamp from
-  `RpcOptions.TimestampNanos`. `Poll` is the convenience form: it checks
-  deadlines with the current timestamp. A pull-based transport drains its
-  queue into `HandleFrame` first.
+- The transport raises `FrameReceived` from its receive loop. The peer
+  subscribes at construction. The transport or the host calls
+  `CheckTimeouts` with a timestamp from `RpcOptions.TimestampNanos`. `Poll`
+  is the convenience form: it checks deadlines with the current timestamp. A
+  pull-based transport drains its queue into `HandleFrame` first.
 
 ## RpcClient and RpcServer
 

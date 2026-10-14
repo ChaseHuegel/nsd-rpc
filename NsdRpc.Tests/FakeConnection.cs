@@ -9,6 +9,7 @@ internal sealed class FakeConnection : IRpcConnection
     public readonly List<byte[]> SentFrames = [];
 
     private Action? _disconnectedHandlers;
+    private RpcFrameHandler? _frameReceivedHandlers;
     private bool _disconnected;
 
     public bool IsConnectedValue { get; set; } = true;
@@ -19,6 +20,12 @@ internal sealed class FakeConnection : IRpcConnection
     {
         add => _disconnectedHandlers += value;
         remove => _disconnectedHandlers -= value;
+    }
+
+    public event RpcFrameHandler FrameReceived
+    {
+        add => _frameReceivedHandlers += value;
+        remove => _frameReceivedHandlers -= value;
     }
 
     public bool TrySend(ReadOnlySpan<byte> frame)
