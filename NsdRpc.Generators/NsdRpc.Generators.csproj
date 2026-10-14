@@ -32,7 +32,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <AdditionalFiles Include="RpcServiceAttribute.cs" />
+    <EmbeddedResource Include="RpcServiceAttribute.cs" LogicalName="NsdRpc.RpcServiceAttribute.cs" />
     <AdditionalFiles Include="AnalyzerReleases.Shipped.md" />
     <AdditionalFiles Include="AnalyzerReleases.Unshipped.md" />
   </ItemGroup>

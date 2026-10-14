@@ -2,20 +2,36 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Text;
 
 namespace NsdRpc.Generators;
 
 [Generator(LanguageNames.CSharp)]
 public sealed class RpcServiceGenerator : IIncrementalGenerator
 {
-    private const string AttributeFileName = "RpcServiceAttribute.cs";
+    private const string AttributeResourceName = "NsdRpc.RpcServiceAttribute.cs";
+
+    // The marker attribute source is embedded in the generator assembly. It is
+    // the same file the generator project compiles (guarded away), so a
+    // consumer compilation gets it by emission, not by an additional file.
+    private static readonly Lazy<string> AttributeSource = new(
+        () =>
+        {
+            using Stream? stream = typeof(RpcServiceGenerator).Assembly.GetManifestResourceStream(AttributeResourceName);
+            if (stream == null)
+            {
+                return string.Empty;
+            }
+
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            return reader.ReadToEnd();
+        });
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -24,16 +40,8 @@ public sealed class RpcServiceGenerator : IIncrementalGenerator
                 static (node, _) => node is BaseTypeDeclarationSyntax decl && HasServiceAttribute(decl),
                 static (ctx, ct) => BuildService(ctx, ct));
 
-        IncrementalValueProvider<ImmutableArray<AdditionalText>> attributeFiles = context.AdditionalTextsProvider
-            .Where(static text => text.Path.EndsWith(AttributeFileName, StringComparison.Ordinal))
-            .Collect();
-
-        var combined = services.Collect().Combine(attributeFiles);
-
-        context.RegisterSourceOutput(combined, static (spc, pair) =>
+        context.RegisterSourceOutput(services.Collect(), static (spc, models) =>
         {
-            (ImmutableArray<ServiceModel> models, ImmutableArray<AdditionalText> attributeFiles) = pair;
-
             foreach (ServiceModel model in models)
             {
                 foreach (Diagnostic diagnostic in model.Diagnostics)
@@ -49,15 +57,10 @@ public sealed class RpcServiceGenerator : IIncrementalGenerator
 
             // The marker attribute always resolves, even for a malformed service,
             // so only the RSG diagnostics point at the real problem.
-            if (!attributeFiles.IsEmpty)
+            string attributeSource = AttributeSource.Value;
+            if (attributeSource.Length > 0)
             {
-                SourceText? attributeSource = attributeFiles[0].GetText(CancellationToken.None);
-                if (attributeSource != null)
-                {
-                    spc.AddSource(
-                        "NsdRpc.RpcServiceAttribute.g.cs",
-                        SourceText.From(attributeSource.ToString(), Encoding.UTF8));
-                }
+                spc.AddSource("NsdRpc.RpcServiceAttribute.g.cs", attributeSource);
             }
 
             foreach (ServiceModel model in models)

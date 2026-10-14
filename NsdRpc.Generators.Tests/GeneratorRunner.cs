@@ -1,7 +1,6 @@
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.Text;
 using NsdRpc;
 using NsdRpc.Generators;
 
@@ -9,18 +8,6 @@ namespace NsdRpc.Generators.Tests;
 
 internal static class GeneratorRunner
 {
-    public const string AttributeSource = """
-        #if !NSDRPC_GENERATORS
-        namespace NsdRpc
-        {
-            [global::System.AttributeUsage(global::System.AttributeTargets.Interface)]
-            internal sealed class RpcServiceAttribute : global::System.Attribute
-            {
-            }
-        }
-        #endif
-        """;
-
     public static (Compilation Compilation, GeneratorDriverRunResult Result, ImmutableArray<Diagnostic> Diagnostics)
         Run(string source)
     {
@@ -32,14 +19,8 @@ internal static class GeneratorRunner
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
         var generator = new RpcServiceGenerator().AsSourceGenerator();
-        AdditionalText[] additionalTexts =
-        [
-            new InMemoryAdditionalText("RpcServiceAttribute.cs", AttributeSource),
-        ];
-
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
             [generator],
-            additionalTexts,
             parseOptions: (CSharpParseOptions)syntaxTree.Options);
 
         driver = driver.RunGeneratorsAndUpdateCompilation(
@@ -58,15 +39,5 @@ internal static class GeneratorRunner
         }
 
         yield return MetadataReference.CreateFromFile(typeof(RpcClient).Assembly.Location);
-    }
-
-    private sealed class InMemoryAdditionalText(string path, string text) : AdditionalText
-    {
-        public override string Path { get; } = path;
-
-        public override SourceText GetText(CancellationToken cancellationToken = default)
-        {
-            return SourceText.From(text);
-        }
     }
 }
