@@ -1,9 +1,9 @@
 # RPC Engine and Handler API
 
 One subject: the API of the RPC library. Read
-[rpc-protocol](rpc-protocol.md) for the wire contract. The Layer 0 interfaces
-and options landed. Issues
-[0004](../issues/0004-rpc-peer-engine.md) through
+[rpc-protocol](rpc-protocol.md) for the wire contract. Layer 0 and the
+`RpcPeer` engine landed. Issues
+[0005](../issues/0005-rpc-handler-dispatch.md) through
 [0008](../issues/0008-rpc-streaming-cancellation.md) build the rest.
 
 ## Layers
@@ -80,6 +80,9 @@ public sealed class RpcOptions
 
 ## RpcPeer
 
+The engine lives in
+[NsdRpc/Engine/](../../NsdRpc/Engine/RpcPeer.cs).
+
 ```csharp
 public sealed class RpcPeer
 {
@@ -129,8 +132,9 @@ Engine rules:
   on disconnect and cleanup.
 - The transport calls `HandleFrame` from its receive loop. The transport or
   the host calls `CheckTimeouts` with a timestamp from
-  `RpcOptions.TimestampNanos`. `Poll` drains a pull-based transport and then
-  checks deadlines.
+  `RpcOptions.TimestampNanos`. `Poll` is the convenience form: it checks
+  deadlines with the current timestamp. A pull-based transport drains its
+  queue into `HandleFrame` first.
 
 ## RpcClient and RpcServer
 
