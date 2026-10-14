@@ -95,6 +95,86 @@ public sealed class RpcServiceGeneratorTests
             s => s.HintName == "NsdRpc.RpcServiceAttribute.g.cs");
     }
 
+    [Fact]
+    public void GeneratesHandlerBase()
+    {
+        const string source = """
+            using System.Threading;
+            using System.Threading.Tasks;
+            using NsdRpc;
+            using NsdRpc.Wire;
+
+            [RpcService]
+            public interface IEchoService
+            {
+                [RpcMethod(100)]
+                Task<RpcResult<Handshake>> EchoAsync(Handshake request, CancellationToken cancellationToken = default);
+            }
+            """;
+
+        (_, GeneratorDriverRunResult result, ImmutableArray<Diagnostic> diagnostics) = GeneratorRunner.Run(source);
+
+        Assert.Empty(diagnostics);
+        string text = GeneratedSource(result, "EchoAsyncHandler.g.cs");
+        Assert.Contains("[global::NsdRpc.RpcMethod(100UL)]", text);
+        Assert.Contains(
+            "abstract class EchoAsyncHandler : global::NsdRpc.IRpcHandler<global::NsdRpc.Wire.Handshake, global::NsdRpc.Wire.Handshake>",
+            text);
+        Assert.Contains(
+            "protected abstract global::System.Threading.Tasks.ValueTask<global::NsdRpc.RpcResult<global::NsdRpc.Wire.Handshake>> EchoAsync(",
+            text);
+    }
+
+    [Fact]
+    public void GeneratedHandlerCompilesAndRegisters()
+    {
+        const string source = """
+            using System;
+            using System.Reflection;
+            using System.Threading;
+            using System.Threading.Tasks;
+            using NsdRpc;
+            using NsdRpc.Wire;
+
+            [RpcService]
+            public interface IEchoService
+            {
+                [RpcMethod(100)]
+                Task<RpcResult<Handshake>> EchoAsync(Handshake request, CancellationToken cancellationToken = default);
+            }
+
+            public sealed class TestHandler : EchoAsyncHandler
+            {
+                protected override ValueTask<RpcResult<Handshake>> EchoAsync(Handshake request, RpcContext context, CancellationToken cancellationToken)
+                {
+                    return new ValueTask<RpcResult<Handshake>>(RpcResult<Handshake>.Success(new Handshake(request.ProtocolVersion + 1)));
+                }
+            }
+
+            public static class Driver
+            {
+                public static int Run()
+                {
+                    var registry = new RpcRegistry();
+                    registry.Add(new TestHandler());
+                    registry.Freeze();
+                    RpcMethodAttribute? attribute = typeof(TestHandler).GetCustomAttribute<RpcMethodAttribute>(inherit: true);
+                    if (attribute == null || attribute.Method != 100UL)
+                    {
+                        throw new Exception("the inherited method attribute is missing");
+                    }
+
+                    return 1;
+                }
+            }
+            """;
+
+        (Compilation compilation, _, ImmutableArray<Diagnostic> diagnostics) = GeneratorRunner.Run(source);
+
+        Assert.Empty(diagnostics);
+        Assert.Equal(1, RunDriver(compilation));
+    }
+
     [Theory]
     [InlineData("RSG1001", """
         using NsdRpc;
@@ -262,7 +342,11 @@ public sealed class RpcServiceGeneratorTests
         (Compilation compilation, _, ImmutableArray<Diagnostic> diagnostics) = GeneratorRunner.Run(source);
 
         Assert.Empty(diagnostics);
+        Assert.Equal(0, RunDriver(compilation));
+    }
 
+    private static int RunDriver(Compilation compilation)
+    {
         using var stream = new MemoryStream();
         Microsoft.CodeAnalysis.Emit.EmitResult emit = compilation.Emit(stream);
         Assert.True(emit.Success, string.Join(Environment.NewLine, emit.Diagnostics));
@@ -270,14 +354,14 @@ public sealed class RpcServiceGeneratorTests
         Assembly assembly = Assembly.Load(stream.ToArray());
         Type driver = assembly.GetType("Driver")!;
         MethodInfo run = driver.GetMethod("Run")!;
-
         try
         {
-            Assert.Equal(0, (int)run.Invoke(null, null)!);
+            return (int)run.Invoke(null, null)!;
         }
         catch (TargetInvocationException exception)
         {
             Assert.Fail(exception.InnerException!.ToString());
+            return 0;
         }
     }
 

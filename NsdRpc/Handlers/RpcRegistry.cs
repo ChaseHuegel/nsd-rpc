@@ -21,7 +21,7 @@ public sealed class RpcRegistry
             throw new ArgumentNullException(nameof(handler));
         }
 
-        RpcMethodAttribute? attribute = handler.GetType().GetCustomAttribute<RpcMethodAttribute>();
+        RpcMethodAttribute? attribute = handler.GetType().GetCustomAttribute<RpcMethodAttribute>(inherit: true);
         if (attribute == null)
         {
             throw new ArgumentException("The handler class needs an RpcMethod attribute.", nameof(handler));
@@ -64,7 +64,7 @@ public sealed class RpcRegistry
                 continue;
             }
 
-            if (type.GetCustomAttribute<RpcMethodAttribute>() == null)
+            if (type.GetCustomAttribute<RpcMethodAttribute>(inherit: true) == null)
             {
                 continue;
             }

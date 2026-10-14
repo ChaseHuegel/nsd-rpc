@@ -333,3 +333,29 @@ call. An optional `TimeSpan?` timeout parameter and a trailing
 `CancellationToken` forward to the underlying call. The result stays an
 `RpcResult<T>`. See [issue 0010](../issues/0010-rpc-service-generator.md).
 
+The same interface generates one `{MethodName}Handler` abstract base per
+method. A session and a sink overload share one base because they share the
+method id. The base implements `IRpcHandler<TRequest, TResponse>`, carries
+`[RpcMethod]`, and exposes the method as a protected typed method with the
+`RpcContext`, so streaming works through `context.Stream`.
+
+```csharp
+public sealed class MyListHandler : ListAsyncHandler
+{
+    protected override ValueTask<RpcResult<ListResponse>> ListAsync(
+        ListRequest request, RpcContext context, CancellationToken cancellationToken)
+    {
+        foreach (ListItem item in LoadItems(request))
+        {
+            context.Stream(item);
+        }
+
+        return new(RpcResult<ListResponse>.Success(new ListResponse(count)));
+    }
+}
+```
+
+`RpcRegistry.Add` reads `[RpcMethod]` through inheritance, so the concrete
+class registers without repeating the id. See
+[issue 0011](../issues/0011-rpc-service-handler-skeletons.md).
+

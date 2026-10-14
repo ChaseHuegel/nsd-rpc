@@ -83,6 +83,33 @@ public sealed class RpcRegistryTests
         Assert.Throws<ArgumentNullException>(() => registry.Add<Handshake, Handshake>(null!));
     }
 
+    [RpcMethod(500)]
+    private abstract class MarkedBaseHandler : IRpcHandler<Handshake, Handshake>
+    {
+        public abstract ValueTask<RpcResult<Handshake>> ExecuteAsync(
+            Handshake request, RpcContext context, CancellationToken cancellationToken);
+    }
+
+    private sealed class DerivedHandler : MarkedBaseHandler
+    {
+        public override ValueTask<RpcResult<Handshake>> ExecuteAsync(
+            Handshake request, RpcContext context, CancellationToken cancellationToken)
+        {
+            return new ValueTask<RpcResult<Handshake>>(RpcResult<Handshake>.Success(default));
+        }
+    }
+
+    [Fact]
+    public void AddSeesInheritedMethodAttribute()
+    {
+        var registry = new RpcRegistry();
+
+        registry.Add(new DerivedHandler());
+        registry.Freeze();
+
+        Assert.True(registry.TryGet(500, out _));
+    }
+
     [Fact]
     public async Task ScanAssemblyRegistersMarkedHandlers()
     {
