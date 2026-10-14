@@ -14,6 +14,7 @@ container structure and where each piece goes. Update it as code lands.
 | NsdRpc.Generators.Tests | [NsdRpc.Generators.Tests/NsdRpc.Generators.Tests.csproj](../../NsdRpc.Generators.Tests/NsdRpc.Generators.Tests.csproj) | xunit tests for the generator. Not packed. |
 | Chat.Common | [samples/Chat.Common](../../samples/Chat.Common/Chat.Common.csproj) | The shared chat wire contract and fake data. Not packed. |
 | Chat.Raw | [samples/Chat.Raw](../../samples/Chat.Raw/Chat.Raw.csproj) | The raw-API chat sample. Not packed. |
+| Chat.Generated | [samples/Chat.Generated](../../samples/Chat.Generated/Chat.Generated.csproj) | The source-generator chat sample. Not packed. |
 | Solution | [NsdRpc.sln](../../NsdRpc.sln) | Contains all projects. |
 
 The libraries target `netstandard2.1;net10.0`. The generator targets
