@@ -16,6 +16,8 @@ internal sealed class InMemoryConnection : IRpcConnection
 
     public List<byte[]> SentFrames { get; } = [];
 
+    internal event Action? FrameDelivered;
+
     public bool IsConnectedValue { get; set; } = true;
 
     public bool IsConnected => IsConnectedValue;
@@ -45,6 +47,7 @@ internal sealed class InMemoryConnection : IRpcConnection
             Peer._inbox.Enqueue(copy);
         }
 
+        Peer.FrameDelivered?.Invoke();
         return true;
     }
 

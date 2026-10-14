@@ -2,8 +2,8 @@
 
 One subject: the API of the RPC library. Read
 [rpc-protocol](rpc-protocol.md) for the wire contract. The transport, engine,
-and handler layers landed. Issues
-[0006](../issues/0006-rpc-client-server.md) through
+handler layers, and the two composition roots landed. Issues
+[0007](../issues/0007-tcp-transport.md) through
 [0008](../issues/0008-rpc-streaming-cancellation.md) build the rest.
 
 ## Layers
@@ -138,17 +138,27 @@ Engine rules:
 
 ## RpcClient and RpcServer
 
+The composition roots live in
+[NsdRpc/RpcClient.cs](../../NsdRpc/RpcClient.cs) and
+[NsdRpc/RpcServer.cs](../../NsdRpc/RpcServer.cs).
+
 ```csharp
 public sealed class RpcClient
 {
     public RpcClient(IRpcConnection connection, RpcRegistry registry, RpcOptions? options = null);
     // InvokeAsync, InvokeStreamAsync, Notify: same surface as RpcPeer.
+    public void HandleFrame(ReadOnlySpan<byte> frame);
+    public void CheckTimeouts(long timestampNanos);
+    public void Poll();
 }
 
 public sealed class RpcServer
 {
     public RpcServer(IRpcServerTransport transport, RpcRegistry registry, RpcOptions? options = null);
+    public void Start();   // launches the accept loop. Call once.
     public RpcPeer? GetPeer(ulong clientId);
+    public void CheckTimeouts(long timestampNanos);
+    public void Poll();
     public void Close();
 }
 ```
