@@ -61,11 +61,7 @@ public sealed class RpcPeer
     internal RpcDispatchHook? DispatchHook
     {
         get => _dispatchHook;
-        set
-        {
-            Invariant.That(_dispatchHook == null, "The dispatch hook is set once.");
-            _dispatchHook = value;
-        }
+        set => _dispatchHook = value;
     }
 
     public Task<RpcResult<TResponse>> InvokeAsync<TRequest, TResponse>(
@@ -368,6 +364,14 @@ public sealed class RpcPeer
         if (ClaimInbound(requestId) == InboundClaim.Claimed)
         {
             SendResponseFrame(requestId, in result);
+        }
+    }
+
+    internal void TryFail(ulong requestId, int code, string message)
+    {
+        if (ClaimInbound(requestId) == InboundClaim.Claimed)
+        {
+            SendErrorResponseFrame(requestId, code, message);
         }
     }
 

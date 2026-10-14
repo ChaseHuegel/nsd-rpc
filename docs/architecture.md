@@ -49,6 +49,7 @@ analysis gate. See [specs/coding-style](specs/coding-style.md).
 | Protocol | `NsdRpc/Protocol/` | The hand-written wire enums: `RpcMessageKind`, `RpcErrorCode`. |
 | Transport | `NsdRpc/Transport/`, `NsdRpc/RpcOptions.cs` | The connection and listener interfaces, the clock, and peer configuration. |
 | Engine | `NsdRpc/Engine/` | The peer, correlation, timeouts, cancellation, faults, and payload codecs. |
+| Handlers | `NsdRpc/Handlers/` | The method attribute, handler interface, registry, and dispatcher. |
 | Invariant | `NsdRpc/Invariant.cs` | The always-on assert helper. |
 
 ## CI

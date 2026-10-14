@@ -1,9 +1,9 @@
 # RPC Engine and Handler API
 
 One subject: the API of the RPC library. Read
-[rpc-protocol](rpc-protocol.md) for the wire contract. Layer 0 and the
-`RpcPeer` engine landed. Issues
-[0005](../issues/0005-rpc-handler-dispatch.md) through
+[rpc-protocol](rpc-protocol.md) for the wire contract. The transport, engine,
+and handler layers landed. Issues
+[0006](../issues/0006-rpc-client-server.md) through
 [0008](../issues/0008-rpc-streaming-cancellation.md) build the rest.
 
 ## Layers
@@ -186,6 +186,9 @@ public readonly struct RpcContext
 
 ## Handlers
 
+The handler types live in
+[NsdRpc/Handlers/](../../NsdRpc/Handlers/RpcMethodAttribute.cs).
+
 ```csharp
 [AttributeUsage(AttributeTargets.Class)]
 public sealed class RpcMethodAttribute : Attribute
@@ -199,7 +202,7 @@ public sealed class RpcMethodAttribute : Attribute
 public interface IRpcHandler<TRequest, TResponse>
 {
     ValueTask<RpcResult<TResponse>> ExecuteAsync(
-        in TRequest request, in RpcContext context, CancellationToken cancellationToken);
+        TRequest request, RpcContext context, CancellationToken cancellationToken);
 }
 
 public readonly struct RpcResult<T>
@@ -216,6 +219,8 @@ public readonly struct RpcResult<T>
 
 - One interface serves sync and async handlers. A sync handler returns a
   completed ValueTask.
+- The parameters pass by value. The C# language forbids `in` parameters on
+  async methods, so the interface must stay by-value to allow async handlers.
 - Expected failures are results. Exceptions are programmer errors.
 - The attribute is the single source of truth for the method id. Manual
   registration reads it from the handler type.
