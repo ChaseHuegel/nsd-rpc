@@ -326,6 +326,17 @@ var list = new ListServiceClient(client);
 RpcResult<ListResponse> result = await list.ListAsync(new ListRequest("widgets", 100));
 ```
 
+A second constructor takes an `RpcPeer`, so the same typed surface serves
+server-to-client calls through `RpcServer.GetPeer`:
+
+```csharp
+var list = new ListServiceClient(server.GetPeer(clientId)!);
+```
+
+Both constructors forward through the shared
+[IRpcCaller](../../NsdRpc/Engine/IRpcCaller.cs) interface, which `RpcClient`
+and `RpcPeer` both implement.
+
 The generator supports three method shapes. `Task<RpcResult<T>>` maps to a
 plain call. `RpcStreamSession<TChunk, T>` maps to a stream call. The same
 method with an `IChunkSink<TChunk>` parameter maps to the callback stream

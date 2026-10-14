@@ -10,7 +10,7 @@ namespace NsdRpc;
 /// One RPC peer over one connection. Owns the envelope, the id space, and the
 /// pending calls. It knows nothing about handlers.
 /// </summary>
-public sealed class RpcPeer
+public sealed class RpcPeer : IRpcCaller
 {
     private const byte RpcVersion = 1;
 

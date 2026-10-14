@@ -22,6 +22,7 @@ add or work an issue.
 - [x] [nsdc generated output lacks the nullable directive](/docs/issues/0009-nsdc-nullable-directive.md) — nsdc 1.3.4 emits `#nullable enable`; the pipeline workaround is gone.
 - [x] [Typed service clients via the RpcService source generator](/docs/issues/0010-rpc-service-generator.md) — a generator emits `{Name}Client` from `[RpcService]` interfaces.
 - [x] [Server-side handler skeletons from RpcService](/docs/issues/0011-rpc-service-handler-skeletons.md) — the generator also emits `{MethodName}Handler` bases.
+- [x] [Peer-based constructor for generated service clients](/docs/issues/0012-rpc-service-peer-constructor.md) — a `(RpcPeer)` constructor variant for server-side outbound.
 
 ### Research
 
@@ -35,7 +36,7 @@ add or work an issue.
 
 ### Improvement
 
-- [ ] [Peer-based constructor for generated service clients](/docs/issues/0012-rpc-service-peer-constructor.md) — a `(RpcPeer)` constructor variant for server-side outbound.
+<!-- - [ ] [Title](/docs/issues/0000-slug.md) — one-line summary -->
 
 ### Research
 

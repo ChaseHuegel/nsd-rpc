@@ -383,12 +383,18 @@ public sealed class RpcServiceGenerator : IIncrementalGenerator
         sb.Append(indent).Append(model.Accessibility).Append(" sealed class ").Append(model.ClientClassName)
             .Append(" : ").Append(model.InterfaceFullName).AppendLine();
         sb.Append(indent).AppendLine("{");
-        sb.Append(indent).AppendLine("    private readonly global::NsdRpc.RpcClient _client;");
+        sb.Append(indent).AppendLine("    private readonly global::NsdRpc.IRpcCaller _caller;");
         sb.AppendLine();
         sb.Append(indent).Append("    public ").Append(model.ClientClassName)
             .AppendLine("(global::NsdRpc.RpcClient client)");
         sb.Append(indent).AppendLine("    {");
-        sb.Append(indent).AppendLine("        _client = client;");
+        sb.Append(indent).AppendLine("        _caller = client;");
+        sb.Append(indent).AppendLine("    }");
+        sb.AppendLine();
+        sb.Append(indent).Append("    public ").Append(model.ClientClassName)
+            .AppendLine("(global::NsdRpc.RpcPeer peer)");
+        sb.Append(indent).AppendLine("    {");
+        sb.Append(indent).AppendLine("        _caller = peer;");
         sb.Append(indent).AppendLine("    }");
         foreach (MethodModel method in model.Methods)
         {
@@ -429,8 +435,8 @@ public sealed class RpcServiceGenerator : IIncrementalGenerator
         arguments += ", " + timeoutArg + ", " + tokenArg;
 
         string call = method.Kind == CallKind.Plain
-            ? "_client.InvokeAsync"
-            : "_client.InvokeStreamAsync";
+            ? "_caller.InvokeAsync"
+            : "_caller.InvokeStreamAsync";
 
         sb.Append(indent).Append("        return ").Append(call).Append(generics).Append('(')
             .Append(arguments).AppendLine(");");

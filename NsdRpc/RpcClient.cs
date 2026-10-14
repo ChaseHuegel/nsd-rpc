@@ -4,7 +4,7 @@ namespace NsdRpc;
 /// One client endpoint: a peer over one connection plus the handler dispatcher.
 /// Own the instance for the connection's lifetime. It owns the id space.
 /// </summary>
-public sealed class RpcClient
+public sealed class RpcClient : IRpcCaller
 {
     private readonly RpcPeer _peer;
 

@@ -30,8 +30,10 @@ public sealed class RpcServiceGeneratorTests
         string text = GeneratedSource(result, "EchoServiceClient.g.cs");
         Assert.Contains("public sealed class EchoServiceClient : global::IEchoService", text);
         Assert.Contains("public EchoServiceClient(global::NsdRpc.RpcClient client)", text);
+        Assert.Contains("public EchoServiceClient(global::NsdRpc.RpcPeer peer)", text);
+        Assert.Contains("private readonly global::NsdRpc.IRpcCaller _caller;", text);
         Assert.Contains(
-            "return _client.InvokeAsync<global::NsdRpc.Wire.Handshake, global::NsdRpc.Wire.Handshake>(100UL, request, null, cancellationToken);",
+            "return _caller.InvokeAsync<global::NsdRpc.Wire.Handshake, global::NsdRpc.Wire.Handshake>(100UL, request, null, cancellationToken);",
             text);
     }
 
@@ -64,10 +66,10 @@ public sealed class RpcServiceGeneratorTests
             "public global::NsdRpc.RpcStreamSession<global::NsdRpc.Wire.Handshake, global::NsdRpc.Wire.Handshake> StreamAsync(global::NsdRpc.Wire.Handshake request, global::System.TimeSpan? timeout = default, global::System.Threading.CancellationToken cancellationToken = default)",
             text);
         Assert.Contains(
-            "return _client.InvokeStreamAsync<global::NsdRpc.Wire.Handshake, global::NsdRpc.Wire.Handshake, global::NsdRpc.Wire.Handshake>(101UL, request, timeout, cancellationToken);",
+            "return _caller.InvokeStreamAsync<global::NsdRpc.Wire.Handshake, global::NsdRpc.Wire.Handshake, global::NsdRpc.Wire.Handshake>(101UL, request, timeout, cancellationToken);",
             text);
         Assert.Contains(
-            "return _client.InvokeStreamAsync<global::NsdRpc.Wire.Handshake, global::NsdRpc.Wire.Handshake, global::NsdRpc.Wire.Handshake>(101UL, request, sink, null, cancellationToken);",
+            "return _caller.InvokeStreamAsync<global::NsdRpc.Wire.Handshake, global::NsdRpc.Wire.Handshake, global::NsdRpc.Wire.Handshake>(101UL, request, sink, null, cancellationToken);",
             text);
     }
 
@@ -173,6 +175,96 @@ public sealed class RpcServiceGeneratorTests
 
         Assert.Empty(diagnostics);
         Assert.Equal(1, RunDriver(compilation));
+    }
+
+    [Fact]
+    public void GeneratedClientForwardsThroughPeer()
+    {
+        const string source = """
+            using System;
+            using System.Collections.Generic;
+            using System.Threading;
+            using System.Threading.Tasks;
+            using NsdRpc;
+            using NsdRpc.Wire;
+
+            [RpcService]
+            public interface IEchoService
+            {
+                [RpcMethod(100)]
+                Task<RpcResult<Handshake>> EchoAsync(Handshake request, CancellationToken cancellationToken = default);
+            }
+
+            public sealed class FakeServerTransport : IRpcServerTransport
+            {
+                public IServerConnection? Pending;
+                public Task<IServerConnection?> AcceptAsync() => Task.FromResult(Pending);
+                public void Close() { }
+            }
+
+            public sealed class FakeServerConnection : IServerConnection
+            {
+                public ulong ClientId => 1;
+                public System.Net.EndPoint? RemoteEndPoint => null;
+                public bool IsConnected => true;
+                public event Action Disconnected { add { } remove { } }
+                public event RpcFrameHandler FrameReceived { add { } remove { } }
+                public List<byte[]> Frames { get; } = new List<byte[]>();
+                public bool TrySend(ReadOnlySpan<byte> frame)
+                {
+                    Frames.Add(frame.ToArray());
+                    return true;
+                }
+            }
+
+            public static class Driver
+            {
+                public static int Run()
+                {
+                    var transport = new FakeServerTransport();
+                    var server = new RpcServer(transport, new RpcRegistry());
+                    var connection = new FakeServerConnection();
+                    transport.Pending = connection;
+                    server.Start();
+
+                    RpcPeer? peer = null;
+                    for (int i = 0; i < 100000 && peer == null; i++)
+                    {
+                        peer = server.GetPeer(1);
+                        if (peer == null)
+                        {
+                            Thread.Yield();
+                        }
+                    }
+
+                    if (peer == null)
+                    {
+                        throw new Exception("the peer was never accepted");
+                    }
+
+                    var service = new EchoServiceClient(peer);
+                    _ = service.EchoAsync(new Handshake(7));
+
+                    if (connection.Frames.Count != 1)
+                    {
+                        throw new Exception("the call must send one frame");
+                    }
+
+                    Envelope env = Envelope.Deserialize((ReadOnlySpan<byte>)connection.Frames[0].AsSpan(4));
+                    if (env.Kind != (byte)RpcMessageKind.Request || env.Method != 100UL || env.Id != 1UL)
+                    {
+                        throw new Exception("the frame is wrong");
+                    }
+
+                    return 2;
+                }
+            }
+            """;
+
+        (Compilation compilation, _, ImmutableArray<Diagnostic> diagnostics) = GeneratorRunner.Run(source);
+
+        Assert.Empty(diagnostics);
+        Assert.Equal(2, RunDriver(compilation));
     }
 
     [Theory]
