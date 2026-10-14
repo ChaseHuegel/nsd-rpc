@@ -111,17 +111,32 @@ public sealed class TcpIntegrationTests
         server.Close();
     }
 
+    [RpcMethod(999)]
+    private sealed class DeferHandler : IRpcHandler<Handshake, Handshake>
+    {
+        public ValueTask<RpcResult<Handshake>> ExecuteAsync(
+            Handshake request, RpcContext context, CancellationToken cancellationToken)
+        {
+            var completion = new TaskCompletionSource<RpcResult<Handshake>>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            return new ValueTask<RpcResult<Handshake>>(completion.Task);
+        }
+    }
+
     [Fact]
     public async Task AbruptServerCloseFaultsClientCalls()
     {
+        var registry = new RpcRegistry();
+        registry.Add(new DeferHandler());
         var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
-        var server = new RpcServer(transport, new RpcRegistry());
+        var server = new RpcServer(transport, registry);
         server.Start();
         var connection = new TcpClientConnection(
             new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
         var client = new RpcClient(connection, new RpcRegistry());
         await connection.ConnectAsync();
 
+        // The handler never responds, so the only completion is the disconnect.
         Task<RpcResult<Handshake>> call = client.InvokeAsync<Handshake, Handshake>(999, new Handshake(1));
         server.Close();
 

@@ -21,13 +21,10 @@ public sealed class RpcClientTests
     {
         public RpcContext Captured;
 
-        public TaskCompletionSource Called { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
         public ValueTask<RpcResult<Handshake>> ExecuteAsync(
             Handshake request, RpcContext context, CancellationToken cancellationToken)
         {
             Captured = context;
-            Called.TrySetResult();
             return new ValueTask<RpcResult<Handshake>>(
                 RpcResult<Handshake>.Success(new Handshake(request.ProtocolVersion + 10)));
         }
@@ -60,9 +57,14 @@ public sealed class RpcClientTests
         var client = new RpcClient(clientConn, clientRegistry);
         var server = new RpcPeer(serverConn);
 
+        // The response lands in the server connection only after the client
+        // handler returns. Wait for the frame, then pump.
+        var delivered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        serverConn.FrameDelivered += () => delivered.TrySetResult();
+
         Task<RpcResult<Handshake>> call = server.InvokeAsync<Handshake, Handshake>(201, new Handshake(5));
         RpcTestHelpers.Pump(clientConn, client);
-        await handler.Called.Task;
+        await delivered.Task;
         RpcTestHelpers.Pump(serverConn, server);
 
         RpcResult<Handshake> result = await call;
