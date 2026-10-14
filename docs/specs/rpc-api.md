@@ -296,3 +296,40 @@ The wrapper lives in
   and `Response` as a `Task`. The queue is bounded by `MaxBufferedChunks`. A
   full queue faults the stream with `Busy`.
 - Cancelling the token cancels both halves.
+
+## Typed service clients
+
+A source generator in the
+[NsdRpc.Generators](../../NsdRpc.Generators/NsdRpc.Generators.csproj) project
+turns an attributed interface into a typed client. Reference the generator
+as an analyzer and mark the interface with `[RpcService]`. The generator
+emits the marker and a `{Name}Client` class in the same namespace.
+
+```csharp
+[RpcService]
+public interface IListService
+{
+    [RpcMethod(Methods.List)]
+    Task<RpcResult<ListResponse>> ListAsync(
+        ListRequest request, CancellationToken cancellationToken = default);
+
+    [RpcMethod(Methods.ListStream)]
+    RpcStreamSession<ListItem, ListResponse> StreamListAsync(
+        ListRequest request, CancellationToken cancellationToken = default);
+}
+```
+
+The client reads like an ordinary instance method:
+
+```csharp
+var list = new ListServiceClient(client);
+RpcResult<ListResponse> result = await list.ListAsync(new ListRequest("widgets", 100));
+```
+
+The generator supports three method shapes. `Task<RpcResult<T>>` maps to a
+plain call. `RpcStreamSession<TChunk, T>` maps to a stream call. The same
+method with an `IChunkSink<TChunk>` parameter maps to the callback stream
+call. An optional `TimeSpan?` timeout parameter and a trailing
+`CancellationToken` forward to the underlying call. The result stays an
+`RpcResult<T>`. See [issue 0010](../issues/0010-rpc-service-generator.md).
+

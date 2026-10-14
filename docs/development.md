@@ -28,11 +28,22 @@ dotnet build                                        # runs nsdc codegen first
 dotnet build --configuration Release
 dotnet test                                         # xunit, edge-case tests
 dotnet pack NsdRpc/NsdRpc.csproj -o ./.packages/    # NuGet package
+dotnet pack NsdRpc.Generators/NsdRpc.Generators.csproj -o ./.packages/
 ```
 
 The build runs `nsdc` before any compile step. Generated code lands in
 `NsdRpc/CodeGen/Output/`, which is untracked. See
 [specs/codegen-pipeline](specs/codegen-pipeline.md) for the full contract.
+
+The `NsdRpc.Generators` package is a source generator. Consuming projects
+reference it as an analyzer:
+
+```xml
+<ProjectReference Include="NsdRpc.Generators" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+```
+
+The generator emits typed service clients. See
+[specs/rpc-api](specs/rpc-api.md).
 
 ## Code style
 

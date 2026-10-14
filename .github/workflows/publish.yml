@@ -32,7 +32,9 @@ jobs:
         run: dotnet test
 
       - name: Pack
-        run: dotnet pack NsdRpc/NsdRpc.csproj --configuration Release -o ./.packages/
+        run: |
+          dotnet pack NsdRpc/NsdRpc.csproj --configuration Release -o ./.packages/
+          dotnet pack NsdRpc.Generators/NsdRpc.Generators.csproj --configuration Release -o ./.packages/
 
       - name: Push to NuGet
         run: dotnet nuget push ./.packages/*.nupkg --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json

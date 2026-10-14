@@ -4,7 +4,7 @@ namespace NsdRpc;
 /// Marks a handler class with its method id. The id is a wire contract.
 /// Never change it between builds.
 /// </summary>
-[AttributeUsage(AttributeTargets.Class)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public sealed class RpcMethodAttribute : Attribute
 {
     public RpcMethodAttribute(ulong method, RpcDirection direction = RpcDirection.Both)
