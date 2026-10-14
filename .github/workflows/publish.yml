@@ -1,0 +1,38 @@
+name: publish
+
+# Publishing runs only on version tags. Bump the Version property in
+# NsdRpc/NsdRpc.csproj before tagging, then tag like: v0.1.0
+on:
+  push:
+    tags: [ "v*" ]
+
+env:
+  # Pin the nsdc compiler. Bump together with the needlefish release.
+  NSDC_VERSION: 1.3.2
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install nsdc
+        run: |
+          curl -fsSL -o /tmp/nsdc.zip "https://github.com/ChaseHuegel/needlefish/releases/download/v${NSDC_VERSION}/nsdc_linux.zip"
+          unzip -o /tmp/nsdc.zip -d /tmp/nsdc
+          chmod +x /tmp/nsdc/nsdc
+          echo "/tmp/nsdc" >> "$GITHUB_PATH"
+
+      - name: Test
+        run: dotnet test
+
+      - name: Pack
+        run: dotnet pack NsdRpc/NsdRpc.csproj --configuration Release -o ./.packages/
+
+      - name: Push to NuGet
+        run: dotnet nuget push ./.packages/*.nupkg --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json
