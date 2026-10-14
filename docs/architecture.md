@@ -49,7 +49,7 @@ analysis gate. See [specs/coding-style](specs/coding-style.md).
 |---|---|---|
 | Protocol | `NsdRpc/Protocol/` | The hand-written wire enums: `RpcMessageKind`, `RpcErrorCode`. |
 | Transport | `NsdRpc/Transport/`, `NsdRpc/RpcOptions.cs` | The connection and listener interfaces, the clock, and peer configuration. |
-| Engine | `NsdRpc/Engine/` | The peer, correlation, timeouts, cancellation, faults, and payload codecs. |
+| Engine | `NsdRpc/Engine/` | The peer, correlation, timeouts, cancellation, faults, payload codecs, and stream sessions. |
 | Handlers | `NsdRpc/Handlers/` | The method attribute, handler interface, registry, and dispatcher. |
 | Composition | `NsdRpc/RpcClient.cs`, `NsdRpc/RpcServer.cs` | The client and server roots that bind a peer, a transport, and a registry. |
 | Tcp transport | `NsdRpc.Tcp/` | The frame decoder, socket engine, connections, and the handshake. |

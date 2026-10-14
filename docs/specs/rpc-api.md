@@ -1,9 +1,8 @@
 # RPC Engine and Handler API
 
 One subject: the API of the RPC library. Read
-[rpc-protocol](rpc-protocol.md) for the wire contract. The transport, engine,
-handler layers, the two composition roots, and the TCP transport landed.
-Issue [0008](../issues/0008-rpc-streaming-cancellation.md) builds the rest.
+[rpc-protocol](rpc-protocol.md) for the wire contract. The implementation is
+complete.
 
 ## Layers
 
@@ -287,6 +286,9 @@ public interface IPayloadSerializer<T>
 - `TryDeserialize` returns a result. It never throws.
 
 ## Streaming consumption
+
+The wrapper lives in
+[NsdRpc/Engine/RpcStreamSession.cs](../../NsdRpc/Engine/RpcStreamSession.cs).
 
 - Callback core: `InvokeStreamAsync` with an `IChunkSink<TChunk>`. The sink
   owns the buffering policy.

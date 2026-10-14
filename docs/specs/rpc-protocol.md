@@ -4,10 +4,9 @@ One subject: the RPC wire protocol. The protocol models JSON-RPC 2.0. It runs
 on the nsd wire format. See [nsd-schemas](nsd-schemas.md) for the format and
 [codegen-pipeline](codegen-pipeline.md) for the build wiring.
 
-Status: ratified on 2026-10-14. The envelope schema, the message kinds, and
-the error codes landed. Issues
-[0003](../issues/0003-rpc-transport-abstractions.md) through
-[0008](../issues/0008-rpc-streaming-cancellation.md) build the engine.
+Status: ratified on 2026-10-14. The implementation is complete. Issues
+[0002](../issues/0002-rpc-envelope-schema.md) through
+[0008](../issues/0008-rpc-streaming-cancellation.md) built it.
 
 ## Summary
 

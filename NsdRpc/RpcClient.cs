@@ -49,6 +49,19 @@ public sealed class RpcClient
             method, in request, sink, timeout, cancellationToken);
     }
 
+    public RpcStreamSession<TChunk, TResponse> InvokeStreamAsync<TRequest, TChunk, TResponse>(
+        ulong method,
+        in TRequest request,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+        where TRequest : struct
+        where TChunk : struct
+        where TResponse : struct
+    {
+        return _peer.InvokeStreamAsync<TRequest, TChunk, TResponse>(
+            method, in request, timeout, cancellationToken);
+    }
+
     public bool Notify<TRequest>(ulong method, in TRequest request)
         where TRequest : struct
     {

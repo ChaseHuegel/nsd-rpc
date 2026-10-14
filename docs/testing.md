@@ -46,6 +46,18 @@ tests.
 - zero allocation on the span round-trip;
 - empty-buffer behavior.
 
-Malformed-input tests are blocked by
-[issue 0001](issues/0001-malformed-buffer-deserialize-overread.md). The
-generated deserializers over-read truncated buffers.
+The RPC tests pin the rest:
+
+- [EnvelopeTests.cs](../NsdRpc.Tests/EnvelopeTests.cs:8) pins the envelope
+  wire facts: sizes, caps, kinds, boundary ids, and truncation safety.
+- [RpcPeerTests.cs](../NsdRpc.Tests/RpcPeerTests.cs:8) pins the engine rules:
+  correlation, timeouts against a fake clock, cancellation, faults, and the
+  drop-and-log rules.
+- [RpcDispatcherTests.cs](../NsdRpc.Tests/RpcDispatcherTests.cs:8) pins
+  dispatch errors, the app code range, directions, and handler tokens.
+- [TcpFrameDecoderTests.cs](../NsdRpc.Tests/TcpFrameDecoderTests.cs:8) pins
+  the framing contract and fuzzes the decoder.
+- [TcpIntegrationTests.cs](../NsdRpc.Tests/TcpIntegrationTests.cs:8) pins
+  the handshake and round trips over loopback sockets.
+- [RpcStreamingTests.cs](../NsdRpc.Tests/RpcStreamingTests.cs:8) pins
+  streams, keep-alive, overflow, and every cancellation case.

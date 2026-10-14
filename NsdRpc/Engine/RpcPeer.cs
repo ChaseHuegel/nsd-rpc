@@ -184,6 +184,71 @@ public sealed class RpcPeer
         return pending.Completion.Task;
     }
 
+    public RpcStreamSession<TChunk, TResponse> InvokeStreamAsync<TRequest, TChunk, TResponse>(
+        ulong method,
+        in TRequest request,
+        TimeSpan? timeout = null,
+        CancellationToken cancellationToken = default)
+        where TRequest : struct
+        where TChunk : struct
+        where TResponse : struct
+    {
+        if (method == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(method), "Method zero is not a valid method id.");
+        }
+
+        long timeoutNanos = ComputeTimeoutNanos(timeout);
+        long deadlineNanos = ComputeDeadline(timeoutNanos);
+
+        if (!TryAllocateId(out ulong id, out int rejectCode, out string rejectMessage))
+        {
+            if (rejectCode == (int)RpcErrorCode.InternalError)
+            {
+                FaultPending(rejectCode, rejectMessage);
+            }
+
+            return EmptySession<TChunk, TResponse>(rejectCode, rejectMessage);
+        }
+
+        byte[]? payload = SerializePayload(in request, PayloadSerializerCache<TRequest>.Value);
+        if (payload != null && FrameSizeFor(payload.Length) > _options.MaxFrameBytes)
+        {
+            return EmptySession<TChunk, TResponse>(
+                (int)RpcErrorCode.InvalidRequest, "the request frame exceeds MaxFrameBytes");
+        }
+
+        var queue = new AsyncChunkQueue<TChunk>(_options.MaxBufferedChunks);
+        var sink = new SessionChunkSink<TChunk>(queue);
+        var pending = new PendingStreamCall<TChunk, TResponse>(
+            id,
+            deadlineNanos,
+            timeoutNanos,
+            PayloadSerializerCache<TResponse>.Value,
+            PayloadSerializerCache<TChunk>.Value,
+            sink);
+        sink.OnOverflow = () => FaultCall(pending.Id, (int)RpcErrorCode.Busy, "stream buffer full");
+        var session = new RpcStreamSession<TChunk, TResponse>(pending.Completion.Task, queue);
+
+        if (!TryAddPending(pending))
+        {
+            pending.Fail((int)RpcErrorCode.Unavailable, "peer faulted");
+            return session;
+        }
+
+        if (cancellationToken.CanBeCanceled)
+        {
+            pending.Registration = cancellationToken.Register(OnCallCancelled, pending);
+        }
+
+        if (IsPending(pending.Id))
+        {
+            SendRequestFrame(pending.Id, method, payload, pending);
+        }
+
+        return session;
+    }
+
     public bool Notify<TRequest>(ulong method, in TRequest request)
         where TRequest : struct
     {
@@ -457,6 +522,35 @@ public sealed class RpcPeer
                 inbound.CancelSource = cancelSource;
             }
         }
+    }
+
+    internal void FaultCall(ulong id, int errorCode, string errorMessage)
+    {
+        PendingCallBase? pending = null;
+        lock (_pendingLock)
+        {
+            if (_pending.TryGetValue(id, out pending))
+            {
+                _pending.Remove(id);
+            }
+        }
+
+        if (pending == null)
+        {
+            return;
+        }
+
+        pending.DisposeRegistration();
+        pending.Fail(errorCode, errorMessage);
+    }
+
+    private static RpcStreamSession<TChunk, TResponse> EmptySession<TChunk, TResponse>(
+        int errorCode, string errorMessage)
+    {
+        var queue = new AsyncChunkQueue<TChunk>(1);
+        queue.Complete();
+        return new RpcStreamSession<TChunk, TResponse>(
+            FailedTask<TResponse>(errorCode, errorMessage), queue);
     }
 
     private void ValidateOptions()
