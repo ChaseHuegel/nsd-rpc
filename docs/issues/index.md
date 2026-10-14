@@ -20,6 +20,8 @@ add or work an issue.
 - [x] [Add the NsdRpc.Tcp transport project](/docs/issues/0007-tcp-transport.md) — framing, sockets, and the handshake.
 - [x] [Prove streaming and cancellation end to end](/docs/issues/0008-rpc-streaming-cancellation.md) — chunks, keep-alive, and every cancellation case.
 - [x] [nsdc generated output lacks the nullable directive](/docs/issues/0009-nsdc-nullable-directive.md) — nsdc 1.3.4 emits `#nullable enable`; the pipeline workaround is gone.
+- [ ] [Typed service clients via the RpcService source generator](/docs/issues/0010-rpc-service-generator.md) — a generator emits `{Name}Client` from `[RpcService]` interfaces.
+- [ ] [Server-side handler skeletons from RpcService](/docs/issues/0011-rpc-service-handler-skeletons.md) — the generator also emits `{Name}Handler` bases.
 
 ### Research
 
@@ -33,7 +35,7 @@ add or work an issue.
 
 ### Improvement
 
-<!-- - [ ] [Title](/docs/issues/0000-slug.md) — one-line summary -->
+- [ ] [Peer-based constructor for generated service clients](/docs/issues/0012-rpc-service-peer-constructor.md) — a `(RpcPeer)` constructor variant for server-side outbound.
 
 ### Research
 
