@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    The same nsdc codegen wiring an external consumer needs. nsdc must be on
+    the PATH. See docs/specs/codegen-pipeline.md.
+  -->
+  <PropertyGroup>
+    <NsdSchemaDir>$(MSBuildProjectDirectory)/Nsd</NsdSchemaDir>
+    <NsdOutputDir>$(MSBuildProjectDirectory)/CodeGen/Output</NsdOutputDir>
+    <NsdcTool Condition="'$(NsdcTool)' == ''">nsdc</NsdcTool>
+  </PropertyGroup>
+
+  <Target Name="NsdcCodegen" BeforeTargets="CoreCompile">
+    <RemoveDir Directories="$(NsdOutputDir)" />
+    <MakeDir Directories="$(NsdOutputDir)" />
+    <Exec Command="&quot;$(NsdcTool)&quot; -r -i &quot;$(NsdSchemaDir)&quot; -o &quot;$(NsdOutputDir)&quot;" />
+    <ItemGroup>
+      <Compile Include="CodeGen/Output/**/*.cs" KeepDuplicates="false" />
+    </ItemGroup>
+  </Target>
+
+</Project>

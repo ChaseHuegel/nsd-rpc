@@ -1,0 +1,24 @@
+#version 1.0;
+#namespace Chat;
+
+message User
+{
+    int Id = 0;
+    string Name = 1;
+}
+
+message ListUsersRequest
+{
+    int MaxItems = 0;
+}
+
+message ListUsersResponse
+{
+    int Total = 0;
+}
+
+message ChatMessage
+{
+    string Author = 0;
+    string Text = 1;
+}

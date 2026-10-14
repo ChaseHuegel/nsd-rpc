@@ -12,10 +12,12 @@ container structure and where each piece goes. Update it as code lands.
 | NsdRpc.Generators | [NsdRpc.Generators/NsdRpc.Generators.csproj](../../NsdRpc.Generators/NsdRpc.Generators.csproj) | The source generator that emits typed service clients. Ships as the `NsdRpc.Generators` analyzer package. |
 | NsdRpc.Tests | [NsdRpc.Tests/NsdRpc.Tests.csproj](../../NsdRpc.Tests/NsdRpc.Tests.csproj) | xunit tests. References both libraries. Not packed. |
 | NsdRpc.Generators.Tests | [NsdRpc.Generators.Tests/NsdRpc.Generators.Tests.csproj](../../NsdRpc.Generators.Tests/NsdRpc.Generators.Tests.csproj) | xunit tests for the generator. Not packed. |
+| Chat.Common | [samples/Chat.Common](../../samples/Chat.Common/Chat.Common.csproj) | The shared chat wire contract and fake data. Not packed. |
+| Chat.Raw | [samples/Chat.Raw](../../samples/Chat.Raw/Chat.Raw.csproj) | The raw-API chat sample. Not packed. |
 | Solution | [NsdRpc.sln](../../NsdRpc.sln) | Contains all projects. |
 
 The libraries target `netstandard2.1;net10.0`. The generator targets
-`netstandard2.0`. Tests target `net10.0`.
+`netstandard2.0`. Tests and samples target `net10.0`.
 
 ## Build pipeline
 
