@@ -54,7 +54,8 @@ public sealed class RpcPeer : IRpcCaller
 
     internal IRpcConnection Connection => _connection;
 
-    internal ulong ClientId => _clientId;
+    /// <summary>The client id the server assigned, or zero on the client side.</summary>
+    public ulong ClientId => _clientId;
 
     internal bool IsServer => _isServer;
 

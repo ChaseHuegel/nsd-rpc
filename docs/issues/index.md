@@ -23,7 +23,7 @@ add or work an issue.
 - [x] [Typed service clients via the RpcService source generator](/docs/issues/0010-rpc-service-generator.md) — a generator emits `{Name}Client` from `[RpcService]` interfaces.
 - [x] [Server-side handler skeletons from RpcService](/docs/issues/0011-rpc-service-handler-skeletons.md) — the generator also emits `{MethodName}Handler` bases.
 - [x] [Peer-based constructor for generated service clients](/docs/issues/0012-rpc-service-peer-constructor.md) — a `(RpcPeer)` constructor variant for server-side outbound.
-- [ ] [Public client connection events on RpcServer](/docs/issues/0013-rpc-server-client-events.md) — `ClientConnected` and `ClientDisconnected` for broadcasting and tracking.
+- [x] [Public client connection events on RpcServer](/docs/issues/0013-rpc-server-client-events.md) — `ClientConnected` and `ClientDisconnected` for broadcasting and tracking.
 - [ ] [Add the raw chat sample](/docs/issues/0014-raw-chat-sample.md) — the shared schema plus the bare-API console app.
 - [ ] [Add the generated chat sample](/docs/issues/0015-generated-chat-sample.md) — the same pattern through the source generator.
 

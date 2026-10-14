@@ -32,7 +32,7 @@ public sealed class RpcServerTests
         transport.Enqueue(serverConn);
         var server = new RpcServer(transport, registry, options);
         var acceptGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        server.PeerAccepted += peer => acceptGate.TrySetResult();
+        server.ClientConnected += peer => acceptGate.TrySetResult();
         server.Start();
         var client = new RpcClient(clientConn, new RpcRegistry());
         return (server, clientConn, inner, client, acceptGate);
@@ -58,6 +58,81 @@ public sealed class RpcServerTests
         RpcResult<Handshake> result = await call;
         Assert.True(result.IsSuccess);
         Assert.Equal(42, result.Value.ProtocolVersion);
+    }
+
+    [Fact]
+    public async Task ServerRaisesClientConnectedAndDisconnected()
+    {
+        var registry = new RpcRegistry();
+        (InMemoryConnection clientConn, InMemoryConnection inner) = InMemoryConnection.CreatePair();
+        var transport = new FakeServerTransport();
+        transport.Enqueue(new InMemoryServerConnection(inner, 7));
+        var server = new RpcServer(transport, registry);
+
+        RpcPeer? connected = null;
+        RpcPeer? disconnected = null;
+        var connectedGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var disconnectedGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.ClientConnected += peer =>
+        {
+            connected = peer;
+            connectedGate.TrySetResult();
+        };
+        server.ClientDisconnected += peer =>
+        {
+            disconnected = peer;
+            disconnectedGate.TrySetResult();
+        };
+
+        server.Start();
+        await connectedGate.Task;
+        Assert.NotNull(connected);
+        Assert.Equal(7UL, connected.ClientId);
+
+        inner.Disconnect();
+        await disconnectedGate.Task;
+        Assert.Same(connected, disconnected);
+        Assert.Null(server.GetPeer(7));
+    }
+
+    [Fact]
+    public async Task ServerRaisesClientDisconnectedOnPruneAndClose()
+    {
+        var registry = new RpcRegistry();
+        (_, InMemoryConnection innerA) = InMemoryConnection.CreatePair();
+        (_, InMemoryConnection innerB) = InMemoryConnection.CreatePair();
+        var transport = new FakeServerTransport();
+        transport.Enqueue(new InMemoryServerConnection(innerA, 1));
+        transport.Enqueue(new InMemoryServerConnection(innerB, 2));
+        var server = new RpcServer(transport, registry);
+
+        var disconnected = new List<ulong>();
+        var bothGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int connected = 0;
+        server.ClientConnected += peer =>
+        {
+            if (Interlocked.Increment(ref connected) == 2)
+            {
+                bothGate.TrySetResult();
+            }
+        };
+        server.ClientDisconnected += peer =>
+        {
+            lock (disconnected)
+            {
+                disconnected.Add(peer.ClientId);
+            }
+        };
+
+        server.Start();
+        await bothGate.Task;
+
+        innerA.IsConnectedValue = false;
+        server.CheckTimeouts(0);
+        server.Close();
+
+        Assert.Contains(1UL, disconnected);
+        Assert.Contains(2UL, disconnected);
     }
 
     [Fact]

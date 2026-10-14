@@ -162,6 +162,8 @@ public sealed class RpcServer
     public void CheckTimeouts(long timestampNanos);
     public void Poll();
     public void Close();
+    public event Action<RpcPeer> ClientConnected;
+    public event Action<RpcPeer> ClientDisconnected;
 }
 ```
 
@@ -170,6 +172,9 @@ public sealed class RpcServer
 - `RpcServer` owns one peer per connection, keyed by `ClientId`. It accepts
   through the transport. It prunes dead peers and faults their calls.
 - `GetPeer` returns null for an unknown client id.
+- `ClientConnected` fires after the accept loop wires a peer.
+  `ClientDisconnected` fires when a peer leaves, through a disconnect, a
+  prune, or a close. The events let a server broadcast to its clients.
 - Both types are plain constructible classes. The app owns their lifetime.
 
 ## RpcContext

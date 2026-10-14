@@ -44,7 +44,11 @@ public sealed class RpcServer
         _acceptLoop = Task.Run(AcceptLoopAsync);
     }
 
-    internal event Action<RpcPeer>? PeerAccepted;
+    /// <summary>Fires after the accept loop wires one peer.</summary>
+    public event Action<RpcPeer>? ClientConnected;
+
+    /// <summary>Fires when a peer leaves, through a disconnect, a prune, or a close.</summary>
+    public event Action<RpcPeer>? ClientDisconnected;
 
     /// <summary>The peer for one client, or null for an unknown client id.</summary>
     public RpcPeer? GetPeer(ulong clientId)
@@ -80,6 +84,7 @@ public sealed class RpcServer
         foreach (KeyValuePair<ulong, RpcPeer> pair in _peers)
         {
             pair.Value.FaultPending((int)RpcErrorCode.Unavailable, "server closed");
+            ClientDisconnected?.Invoke(pair.Value);
         }
 
         _peers.Clear();
@@ -120,7 +125,7 @@ public sealed class RpcServer
             Invariant.That(_peers.TryAdd(connection.ClientId, peer), "The server transport assigned a duplicate client id.");
             ulong clientId = connection.ClientId;
             connection.Disconnected += () => RemovePeer(clientId);
-            PeerAccepted?.Invoke(peer);
+            ClientConnected?.Invoke(peer);
         }
     }
 
@@ -129,6 +134,7 @@ public sealed class RpcServer
         if (_peers.TryRemove(clientId, out RpcPeer? peer))
         {
             peer.FaultPending((int)RpcErrorCode.Unavailable, "connection closed");
+            ClientDisconnected?.Invoke(peer);
         }
     }
 }
