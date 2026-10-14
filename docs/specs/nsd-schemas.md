@@ -8,7 +8,15 @@ them, and the wire format they define.
 Schemas live in `NsdRpc/Nsd/*.nsd`. The generated code is a product. Never
 edit it. Change the schema instead.
 
-Current schema: [NsdRpc/Nsd/Messages.nsd](../../NsdRpc/Nsd/Messages.nsd:1).
+Current schemas:
+
+- [NsdRpc/Nsd/Messages.nsd](../../NsdRpc/Nsd/Messages.nsd:1) — the
+  `Handshake` message.
+- [NsdRpc/Nsd/Rpc.nsd](../../NsdRpc/Nsd/Rpc.nsd:1) — `RpcError` and
+  `Envelope`, the RPC wire types. See
+  [rpc-protocol](rpc-protocol.md).
+
+The `Handshake` message:
 
 ```nsd
 #version 1.0;
@@ -67,4 +75,6 @@ these rules in hand-written code. Call the generated methods.
 3. Pin the behavior with a test in `NsdRpc.Tests`.
 
 The round-trip contract is pinned by
-[NsdRpc.Tests/HandshakeTests.cs:8](../../NsdRpc.Tests/HandshakeTests.cs).
+[NsdRpc.Tests/HandshakeTests.cs](../../NsdRpc.Tests/HandshakeTests.cs:8)
+and
+[NsdRpc.Tests/EnvelopeTests.cs](../../NsdRpc.Tests/EnvelopeTests.cs:8).

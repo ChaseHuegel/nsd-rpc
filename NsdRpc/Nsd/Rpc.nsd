@@ -1,0 +1,18 @@
+#version 1.0;
+#namespace NsdRpc.Wire;
+
+message RpcError
+{
+    int Code = 0;
+    string Message = 1;
+}
+
+message Envelope
+{
+    byte Version = 0;
+    byte Kind = 1;
+    ulong Id = 2;
+    ulong Method = 3;
+    byte[]? Payload = 4;
+    RpcError? Error = 5;
+}

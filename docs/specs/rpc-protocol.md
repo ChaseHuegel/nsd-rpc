@@ -4,9 +4,10 @@ One subject: the RPC wire protocol. The protocol models JSON-RPC 2.0. It runs
 on the nsd wire format. See [nsd-schemas](nsd-schemas.md) for the format and
 [codegen-pipeline](codegen-pipeline.md) for the build wiring.
 
-Status: ratified on 2026-10-14. No code implements it yet. Issues
-[0002](../issues/0002-rpc-envelope-schema.md) through
-[0008](../issues/0008-rpc-streaming-cancellation.md) build it.
+Status: ratified on 2026-10-14. The envelope schema, the message kinds, and
+the error codes landed. Issues
+[0003](../issues/0003-rpc-transport-abstractions.md) through
+[0008](../issues/0008-rpc-streaming-cancellation.md) build the engine.
 
 ## Summary
 
@@ -46,7 +47,8 @@ Non-goals:
 
 ## Envelope
 
-The envelope schema lives in `NsdRpc/Nsd/Rpc.nsd`. The namespace is
+The envelope schema lives in
+[NsdRpc/Nsd/Rpc.nsd](../../NsdRpc/Nsd/Rpc.nsd:1). The namespace is
 `NsdRpc.Wire`.
 
 ```nsd
@@ -74,10 +76,10 @@ Wire facts:
 
 - The minimum envelope is 26 bytes. It has a null payload and a null error.
 - nsd arrays hold at most 65,535 values. A payload holds at most 65,535
-  bytes. The largest envelope is 65,564 bytes. It has a full payload and a
+  bytes. The largest envelope is 65,566 bytes. It has a full payload and a
   null error.
-- Senders normalize an empty payload to null. Null and empty payloads encode
-  the same way.
+- Senders normalize an empty payload to null. A receiver treats a null
+  payload and an empty payload as no data.
 - Optional fields with no value are not encoded. A null payload costs zero
   bytes.
 
@@ -101,8 +103,10 @@ Rules:
 
 ## Message kinds
 
-`RpcMessageKind : byte` is a hand-written enum. The wire field stays one
-byte. A generated nsd enum would cost two bytes for no gain.
+`RpcMessageKind : byte` is a hand-written enum. See
+[NsdRpc/Protocol/RpcMessageKind.cs](../../NsdRpc/Protocol/RpcMessageKind.cs).
+The wire field stays one byte. A generated nsd enum would cost two bytes for
+no gain.
 
 | Value | Name | Meaning |
 | --- | --- | --- |
@@ -127,7 +131,8 @@ An unknown kind value is dropped and logged.
 
 ## Error codes
 
-`RpcError.Code` uses the JSON-RPC numeric space.
+`RpcError.Code` uses the JSON-RPC numeric space. The codes live in
+[NsdRpc/Protocol/RpcErrorCode.cs](../../NsdRpc/Protocol/RpcErrorCode.cs).
 
 | Code | Name | Use |
 | --- | --- | --- |
