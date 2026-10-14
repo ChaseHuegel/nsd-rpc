@@ -1,8 +1,7 @@
 # Architecture
 
-One subject: the as-built structure of this repository. The library has no
-implementation code yet. This doc records the container structure and where
-each piece goes. Update it as code lands.
+One subject: the as-built structure of this repository. This doc records the
+container structure and where each piece goes. Update it as code lands.
 
 ## Project map
 
@@ -26,7 +25,8 @@ The output is untracked. See
 The wire format is nsd (Needlefish Schema Definition). Schemas are the source
 of truth. nsdc compiles them into C# structs with serialize and deserialize
 methods. See [specs/nsd-schemas](specs/nsd-schemas.md) for the contract and
-the current schema.
+the current schema. The RPC envelope builds on the format. See
+[specs/rpc-protocol](specs/rpc-protocol.md).
 
 ## NuGet packaging
 
@@ -44,11 +44,11 @@ analysis gate. See [specs/coding-style](specs/coding-style.md).
 
 ## Module map
 
-No modules exist yet. When code lands, add one row per module here:
-
 | Module | Source | Responsibility |
 |---|---|---|
-| _none yet_ | | |
+| Protocol | `NsdRpc/Protocol/` | The hand-written wire enums: `RpcMessageKind`, `RpcErrorCode`. |
+| Transport | `NsdRpc/Transport/`, `NsdRpc/RpcOptions.cs` | The connection and listener interfaces, the clock, and peer configuration. |
+| Invariant | `NsdRpc/Invariant.cs` | The always-on assert helper. |
 
 ## CI
 

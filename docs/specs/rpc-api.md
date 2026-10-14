@@ -1,10 +1,10 @@
 # RPC Engine and Handler API
 
 One subject: the API of the RPC library. Read
-[rpc-protocol](rpc-protocol.md) for the wire contract. This doc describes
-future code. No implementation exists yet. Issues
-[0003](../issues/0003-rpc-transport-abstractions.md) through
-[0008](../issues/0008-rpc-streaming-cancellation.md) build it.
+[rpc-protocol](rpc-protocol.md) for the wire contract. The Layer 0 interfaces
+and options landed. Issues
+[0004](../issues/0004-rpc-peer-engine.md) through
+[0008](../issues/0008-rpc-streaming-cancellation.md) build the rest.
 
 ## Layers
 
@@ -17,6 +17,10 @@ future code. No implementation exists yet. Issues
 `RpcClient` and `RpcServer` compose a peer, a transport, and a registry.
 
 ## Layer 0
+
+The interfaces live in
+[NsdRpc/Transport/](../../NsdRpc/Transport/IRpcConnection.cs). Options live
+in [NsdRpc/RpcOptions.cs](../../NsdRpc/RpcOptions.cs).
 
 ```csharp
 public interface IRpcConnection
@@ -47,7 +51,7 @@ public interface IRpcServerTransport
 Rules:
 
 - `TrySend` copies the frame before it returns. It returns false when the
-  connection is closed.
+  frame was rejected: a closed connection or a full queue.
 - `Disconnected` fires once. The peer faults every pending call.
 - A frame is a 4-byte little-endian length prefix and the envelope bytes. The
   frame codec lives in the `NsdRpc.Tcp` project. Custom transports implement
