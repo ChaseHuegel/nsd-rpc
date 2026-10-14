@@ -10,6 +10,8 @@ Fetch only the doc you need. Never fetch the whole tree.
 | Testing doctrine: edge cases, determinism, fuzzing | [testing](testing.md) |
 | As-built architecture and module map | [architecture](architecture.md) |
 | nsd schemas and the wire format | [specs/nsd-schemas](specs/nsd-schemas.md) |
+| RPC wire protocol and envelope | [specs/rpc-protocol](specs/rpc-protocol.md) |
+| RPC engine and handler API | [specs/rpc-api](specs/rpc-api.md) |
 | The nsdc build pipeline | [specs/codegen-pipeline](specs/codegen-pipeline.md) |
 | Issue format and workflow | [specs/issues](specs/issues.md) |
 

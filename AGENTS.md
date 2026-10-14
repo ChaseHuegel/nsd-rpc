@@ -26,6 +26,7 @@ anything.
 | Write any test | [docs/testing.md](docs/testing.md) |
 | Understand the project layout | [docs/architecture.md](docs/architecture.md) |
 | Change the wire format or add a message | [docs/specs/nsd-schemas.md](docs/specs/nsd-schemas.md) |
+| Work on the RPC protocol or engine | [docs/specs/rpc-protocol.md](docs/specs/rpc-protocol.md) |
 | Touch the build pipeline or bump nsdc | [docs/specs/codegen-pipeline.md](docs/specs/codegen-pipeline.md) |
 | Find or add work | [docs/issues/index.md](docs/issues/index.md) |
 
