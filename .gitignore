@@ -2,6 +2,7 @@
 bin/
 obj/
 .packages/
+TestResults/
 
 # nsdc generated output. Regenerated on every build; never committed.
 # See docs/specs/codegen-pipeline.md.
