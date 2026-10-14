@@ -11,7 +11,7 @@ The testing rules live in [testing](testing.md).
 - Use the .NET 10 SDK. The library targets `netstandard2.1;net10.0`. Tests
   target `net10.0`.
 - The `nsdc` compiler must be on your PATH. Pin the version used by CI:
-  currently v1.3.3 from the
+  currently v1.3.4 from the
   [needlefish releases](https://github.com/ChaseHuegel/needlefish/releases).
   Bump `NSDC_VERSION` in the workflows when you bump it here.
 - No `global.json`, `Directory.Build.props`, or `.editorconfig` exist. Each

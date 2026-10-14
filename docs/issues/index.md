@@ -19,6 +19,7 @@ add or work an issue.
 - [x] [Add RpcClient and RpcServer composition](/docs/issues/0006-rpc-client-server.md) — the two composition roots and their lifecycle.
 - [x] [Add the NsdRpc.Tcp transport project](/docs/issues/0007-tcp-transport.md) — framing, sockets, and the handshake.
 - [x] [Prove streaming and cancellation end to end](/docs/issues/0008-rpc-streaming-cancellation.md) — chunks, keep-alive, and every cancellation case.
+- [x] [nsdc generated output lacks the nullable directive](/docs/issues/0009-nsdc-nullable-directive.md) — nsdc 1.3.4 emits `#nullable enable`; the pipeline workaround is gone.
 
 ### Research
 
@@ -32,7 +33,7 @@ add or work an issue.
 
 ### Improvement
 
-- [ ] [nsdc generated output lacks the nullable directive](/docs/issues/0009-nsdc-nullable-directive.md) — the build prepends `#nullable enable`; remove when nsdc emits it.
+<!-- - [ ] [Title](/docs/issues/0000-slug.md) — one-line summary -->
 
 ### Research
 
