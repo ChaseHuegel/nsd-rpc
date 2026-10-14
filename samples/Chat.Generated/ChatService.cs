@@ -13,4 +13,7 @@ public interface IChatService
     [RpcMethod(Methods.ListUsers, RpcDirection.ClientToServer)]
     Task<RpcResult<ListUsersResponse>> ListUsersAsync(
         ListUsersRequest request, IChunkSink<User> sink, CancellationToken cancellationToken = default);
+
+    [RpcMethod(Methods.ChatMessage)]
+    void NotifyChat(ChatMessage message);
 }

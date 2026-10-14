@@ -267,6 +267,187 @@ public sealed class RpcServiceGeneratorTests
         Assert.Equal(2, RunDriver(compilation));
     }
 
+    [Fact]
+    public void GeneratesNotificationClientMethods()
+    {
+        const string source = """
+            using System.Threading;
+            using NsdRpc;
+            using NsdRpc.Wire;
+
+            [RpcService]
+            public interface IService
+            {
+                [RpcMethod(101)]
+                void NotifyAsync(Handshake message);
+
+                [RpcMethod(102)]
+                void Ping();
+            }
+            """;
+
+        (_, GeneratorDriverRunResult result, ImmutableArray<Diagnostic> diagnostics) = GeneratorRunner.Run(source);
+
+        Assert.Empty(diagnostics);
+        string text = GeneratedSource(result, "ServiceClient.g.cs");
+        Assert.Contains(
+            "public void NotifyAsync(global::NsdRpc.Wire.Handshake message)",
+            text);
+        Assert.Contains(
+            "_caller.Notify<global::NsdRpc.Wire.Handshake>(101UL, message);",
+            text);
+        Assert.Contains("public void Ping()", text);
+        Assert.Contains("_caller.Notify(102UL);", text);
+    }
+
+    [Fact]
+    public void GeneratesNotificationHandlerBase()
+    {
+        const string source = """
+            using NsdRpc;
+            using NsdRpc.Wire;
+
+            [RpcService]
+            public interface IService
+            {
+                [RpcMethod(101)]
+                void NotifyAsync(Handshake message);
+            }
+            """;
+
+        (_, GeneratorDriverRunResult result, ImmutableArray<Diagnostic> diagnostics) = GeneratorRunner.Run(source);
+
+        Assert.Empty(diagnostics);
+        string text = GeneratedSource(result, "NotifyAsyncHandler.g.cs");
+        Assert.Contains(
+            "abstract class NotifyAsyncHandler : global::NsdRpc.IRpcHandler<global::NsdRpc.Wire.Handshake, global::NsdRpc.RpcUnit>",
+            text);
+        Assert.Contains("if (context.RequestId != 0UL)", text);
+        Assert.Contains("context.Fail(global::NsdRpc.RpcErrorCode.MethodNotFound", text);
+        Assert.Contains("protected abstract void NotifyAsync(", text);
+        Assert.Contains(
+            result.Results[0].GeneratedSources,
+            s => s.HintName == "NsdRpc.RpcUnit.g.cs");
+    }
+
+    [Theory]
+    [InlineData("RSG1004", """
+        using System.Threading;
+        using NsdRpc;
+        using NsdRpc.Wire;
+        [RpcService]
+        public interface IService
+        {
+            [RpcMethod(101)]
+            void BadAsync(Handshake message, CancellationToken cancellationToken);
+        }
+        """)]
+    [InlineData("RSG1005", """
+        using NsdRpc;
+        using NsdRpc.Wire;
+        [RpcService]
+        public interface IService
+        {
+            [RpcMethod(101)]
+            void BadAsync(object message);
+        }
+        """)]
+    public void ReportsNotificationDiagnostic(string id, string source)
+    {
+        (_, _, ImmutableArray<Diagnostic> diagnostics) = GeneratorRunner.Run(source);
+
+        Assert.Contains(diagnostics, d => d.Id == id);
+    }
+
+    [Fact]
+    public void GeneratedNotificationCompilesAndRuns()
+    {
+        const string source = """
+            using System;
+            using System.Collections.Generic;
+            using System.Reflection;
+            using System.Threading;
+            using NsdRpc;
+            using NsdRpc.Wire;
+
+            [RpcService]
+            public interface IService
+            {
+                [RpcMethod(101)]
+                void NotifyAsync(Handshake message);
+
+                [RpcMethod(102)]
+                void Ping();
+            }
+
+            public sealed class TestHandler : NotifyAsyncHandler
+            {
+                protected override void NotifyAsync(Handshake message, RpcContext context, CancellationToken cancellationToken)
+                {
+                }
+            }
+
+            public static class Driver
+            {
+                public static int Run()
+                {
+                    var connection = new FakeConnection();
+                    var client = new RpcClient(connection, new RpcRegistry());
+                    var service = new ServiceClient(client);
+
+                    service.NotifyAsync(new Handshake(7));
+                    service.Ping();
+
+                    if (connection.Frames.Count != 2)
+                    {
+                        throw new Exception("two notifications expected");
+                    }
+
+                    Envelope first = Envelope.Deserialize((ReadOnlySpan<byte>)connection.Frames[0].AsSpan(4));
+                    if (first.Kind != (byte)RpcMessageKind.Notification || first.Method != 101UL || first.Id != 0UL)
+                    {
+                        throw new Exception("first frame is wrong");
+                    }
+
+                    Envelope second = Envelope.Deserialize((ReadOnlySpan<byte>)connection.Frames[1].AsSpan(4));
+                    if (second.Kind != (byte)RpcMessageKind.Notification || second.Method != 102UL)
+                    {
+                        throw new Exception("second frame is wrong");
+                    }
+
+                    var registry = new RpcRegistry();
+                    registry.Add(new TestHandler());
+                    registry.Freeze();
+                    RpcMethodAttribute? attribute = typeof(TestHandler).GetCustomAttribute<RpcMethodAttribute>(inherit: true);
+                    if (attribute == null || attribute.Method != 101UL)
+                    {
+                        throw new Exception("inherited method id missing");
+                    }
+
+                    return 4;
+                }
+            }
+
+            public sealed class FakeConnection : IRpcConnection
+            {
+                public List<byte[]> Frames { get; } = new List<byte[]>();
+                public bool IsConnected => true;
+                public event Action Disconnected { add { } remove { } }
+                public event RpcFrameHandler FrameReceived { add { } remove { } }
+                public bool TrySend(ReadOnlySpan<byte> frame)
+                {
+                    Frames.Add(frame.ToArray());
+                    return true;
+                }
+            }
+            """;
+
+        (Compilation compilation, _, ImmutableArray<Diagnostic> diagnostics) = GeneratorRunner.Run(source);
+
+        Assert.Empty(diagnostics);
+        Assert.Equal(4, RunDriver(compilation));
+    }
+
     [Theory]
     [InlineData("RSG1001", """
         using NsdRpc;

@@ -16,15 +16,12 @@ dotnet run --project samples/Chat.Generated
 - The server handler is a subclass of the generated `ListUsersAsyncHandler`.
   The base carries the `RpcMethod` attribute, so the subclass registers
   without repeating the id.
+- `ChatMessage` is a notification, declared as a `void NotifyChat(ChatMessage)`
+  method. The generator emits the client call, a `NotifyChatHandler` base, and
+  the relay and printer subclasses it. The relay rebroadcasts through the
+  generated client's `RpcPeer` constructor.
 - The project references `NsdRpc.Generators` as an analyzer
   (`OutputItemType="Analyzer"`), which is exactly how a consumer wires it.
-
-## What stays raw
-
-`ChatMessage` is a notification, and the generator has no notification shape
-yet. It is sent with `RpcClient.Notify` and handled by a plain `IRpcHandler`
-on both sides. See
-[issue 0016](../../docs/issues/0016-generator-notification-shape.md).
 
 ## What it exercises
 

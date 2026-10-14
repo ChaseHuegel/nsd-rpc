@@ -50,7 +50,7 @@ static async Task<int> RunAsync()
         Console.WriteLine($"[bot] total: {botResult.Value.Total}");
     }
 
-    bot.Notify(Methods.ChatMessage, new ChatMessage("bot", "hello everyone"));
+    botService.NotifyChat(new ChatMessage("bot", "hello everyone"));
 
     Console.WriteLine("[bot] cancelling a stream partway...");
     using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(800));
@@ -77,7 +77,7 @@ static async Task<int> RunAsync()
 
         if (line.Length > 0)
         {
-            local.Notify(Methods.ChatMessage, new ChatMessage("me", line));
+            localService.NotifyChat(new ChatMessage("me", line));
         }
     }
 
@@ -113,31 +113,26 @@ public sealed class MyListUsersHandler : ListUsersAsyncHandler
     }
 }
 
-// Notifications have no generated shape yet, so these stay raw. See issue 0016.
-[RpcMethod(Methods.ChatMessage)]
-public sealed class ChatRelayHandler(ConcurrentDictionary<ulong, RpcPeer> peers)
-    : IRpcHandler<ChatMessage, ListUsersResponse>
+// Notifications use the generated handler base. The relay rebroadcasts through
+// the generated client, which also exercises the RpcPeer constructor.
+public sealed class ChatRelayHandler(ConcurrentDictionary<ulong, RpcPeer> peers) : NotifyChatHandler
 {
-    public ValueTask<RpcResult<ListUsersResponse>> ExecuteAsync(
+    protected override void NotifyChat(
         ChatMessage message, RpcContext context, CancellationToken cancellationToken)
     {
         foreach (RpcPeer peer in peers.Values)
         {
-            peer.Notify(Methods.ChatMessage, in message);
+            new ChatServiceClient(peer).NotifyChat(message);
         }
-
-        return new ValueTask<RpcResult<ListUsersResponse>>(RpcResult<ListUsersResponse>.Success(default));
     }
 }
 
-[RpcMethod(Methods.ChatMessage)]
-public sealed class ChatPrinter(string prefix) : IRpcHandler<ChatMessage, ListUsersResponse>
+public sealed class ChatPrinter(string prefix) : NotifyChatHandler
 {
-    public ValueTask<RpcResult<ListUsersResponse>> ExecuteAsync(
+    protected override void NotifyChat(
         ChatMessage message, RpcContext context, CancellationToken cancellationToken)
     {
         Console.WriteLine(prefix + message.Author + ": " + message.Text);
-        return new ValueTask<RpcResult<ListUsersResponse>>(RpcResult<ListUsersResponse>.Success(default));
     }
 }
 

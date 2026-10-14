@@ -375,3 +375,20 @@ public sealed class MyListHandler : ListAsyncHandler
 class registers without repeating the id. See
 [issue 0011](../issues/0011-rpc-service-handler-skeletons.md).
 
+A method returning `void` is a notification. It takes zero or one request
+parameter and generates a call to `Notify`:
+
+```csharp
+[RpcMethod(Methods.ChatMessage)]
+void NotifyChat(ChatMessage message);
+
+[RpcMethod(Methods.Ping)]
+void Ping();
+```
+
+The generated client forwards to `Notify`; the `bool` rejection signal
+stays on the raw API. The generator also emits a `{MethodName}Handler` base
+that implements `IRpcHandler<TRequest, RpcUnit>`. The base refuses requests
+on a notification id with `MethodNotFound`, so the placeholder is never
+serialized. See [issue 0016](../issues/0016-generator-notification-shape.md).
+

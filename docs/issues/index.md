@@ -39,7 +39,7 @@ add or work an issue.
 
 ### Improvement
 
-- [ ] [Notification shape in the RpcService generator](/docs/issues/0016-generator-notification-shape.md) — generated `bool NotifyX(TRequest)` methods for one-way messages.
+- [x] [Notification shape in the RpcService generator](/docs/issues/0016-generator-notification-shape.md) — generated `void NotifyX(TRequest)` methods for one-way messages.
 
 ### Research
 
