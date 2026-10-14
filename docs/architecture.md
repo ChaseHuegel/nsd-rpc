@@ -31,10 +31,16 @@ the current schema.
 ## NuGet packaging
 
 Package metadata lives in
-[NsdRpc/NsdRpc.csproj:19-29](../../NsdRpc/NsdRpc.csproj). Version is set
+[NsdRpc/NsdRpc.csproj:26-36](../../NsdRpc/NsdRpc.csproj). Version is set
 there. Pack with `dotnet pack NsdRpc/NsdRpc.csproj -o ./.packages/`. CI packs
 and pushes to nuget.org only on `v*` tags. See
 [.github/workflows/publish.yml](../../.github/workflows/publish.yml).
+
+## Static analysis
+
+Both projects compile with warnings as errors and Roslyn analyzers at their
+strictest level. Zero warnings allowed. The CI build is the daily static
+analysis gate. See [specs/coding-style](specs/coding-style.md).
 
 ## Module map
 

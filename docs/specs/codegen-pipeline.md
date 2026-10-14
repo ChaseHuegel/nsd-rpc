@@ -5,7 +5,7 @@ join the compile. This wiring is arcane. Change it only with a test.
 
 ## Contract
 
-Source of truth: [NsdRpc/NsdRpc.csproj:55-67](../../NsdRpc/NsdRpc.csproj).
+Source of truth: [NsdRpc/NsdRpc.csproj:62-74](../../NsdRpc/NsdRpc.csproj).
 
 1. `nsdc` must be on the PATH. The build fails without it. That is the
    contract.
@@ -18,7 +18,7 @@ Source of truth: [NsdRpc/NsdRpc.csproj:55-67](../../NsdRpc/NsdRpc.csproj).
 4. The target adds the generated `.cs` files to `Compile` at target time.
    An eval-time glob would see an empty directory on a first build.
 5. The library sets `BuildInParallel` to `false`
-   ([csproj:16](../../NsdRpc/NsdRpc.csproj)). The target rewrites a shared
+   ([csproj:23](../../NsdRpc/NsdRpc.csproj)). The target rewrites a shared
    directory. Parallel per-framework builds would race on it. The codegen
    therefore runs once per framework, in order.
 6. `CodeGen/Output/` is untracked. See [.gitignore](../../.gitignore).
@@ -29,7 +29,7 @@ PATH for full IntelliSense on generated types.
 ## Overrides
 
 - `NsdcTool` property: a custom path to the compiler. Default `nsdc`. See
-  [csproj:52](../../NsdRpc/NsdRpc.csproj).
+  [csproj:59](../../NsdRpc/NsdRpc.csproj).
 
 ## CI
 

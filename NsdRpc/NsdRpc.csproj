@@ -8,6 +8,9 @@
     <!-- nsdc-generated code uses raw pointers. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>NsdRpc</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
     <!--
       Build TFMs one at a time. The NsdcCodegen target rewrites the shared
       CodeGen/Output dir; parallel inner builds would race on it.

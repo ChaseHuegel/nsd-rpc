@@ -22,7 +22,7 @@ add or work an issue.
 
 ### Bug
 
-<!-- - [ ] [Title](/docs/issues/0000-slug.md) — one-line summary -->
+- [ ] [Deserialize reads out of bounds on truncated buffers](/docs/issues/0001-malformed-buffer-deserialize-overread.md) — generated deserializers over-read malformed input.
 
 ### Improvement
 

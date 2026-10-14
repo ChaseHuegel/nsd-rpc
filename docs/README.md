@@ -5,7 +5,9 @@ Fetch only the doc you need. Never fetch the whole tree.
 
 | Subject | Doc |
 |---|---|
-| How to work in this repo: toolchain, build, code style, commits | [development](development.md) |
+| How to work in this repo: toolchain, build, commits | [development](development.md) |
+| Coding style: Tiger Style and the Power of 10 in C# | [specs/coding-style](specs/coding-style.md) |
+| Testing doctrine: edge cases, determinism, fuzzing | [testing](testing.md) |
 | As-built architecture and module map | [architecture](architecture.md) |
 | nsd schemas and the wire format | [specs/nsd-schemas](specs/nsd-schemas.md) |
 | The nsdc build pipeline | [specs/codegen-pipeline](specs/codegen-pipeline.md) |
