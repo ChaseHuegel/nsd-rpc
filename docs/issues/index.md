@@ -32,7 +32,7 @@ add or work an issue.
 
 ### Improvement
 
-<!-- - [ ] [Title](/docs/issues/0000-slug.md) — one-line summary -->
+- [ ] [nsdc generated output lacks the nullable directive](/docs/issues/0009-nsdc-nullable-directive.md) — the build prepends `#nullable enable`; remove when nsdc emits it.
 
 ### Research
 

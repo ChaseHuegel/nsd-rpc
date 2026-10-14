@@ -55,10 +55,43 @@
     <NsdcTool Condition="'$(NsdcTool)' == ''">nsdc</NsdcTool>
   </PropertyGroup>
 
+  <!--
+    nsdc 1.3.3 emits nullable annotations without a #nullable directive.
+    CS8669 fails the build when a schema uses optional fields. This task
+    prepends the directive to every generated file. Remove it when nsdc
+    emits the directive itself. See docs/issues/0009-nsdc-nullable-directive.md.
+  -->
+  <UsingTask TaskName="PrependNullableDirective"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <Files ParameterType="Microsoft.Build.Framework.ITaskItem[]" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Code Type="Fragment" Language="cs">
+      <![CDATA[
+      foreach (var item in Files)
+      {
+          var path = item.ItemSpec;
+          var text = System.IO.File.ReadAllText(path);
+          if (!text.StartsWith("#nullable enable", System.StringComparison.Ordinal))
+          {
+              System.IO.File.WriteAllText(path, "#nullable enable" + System.Environment.NewLine + text);
+          }
+      }
+      ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
   <Target Name="NsdcCodegen" BeforeTargets="CoreCompile">
     <RemoveDir Directories="$(NsdOutputDir)" />
     <MakeDir Directories="$(NsdOutputDir)" />
     <Exec Command="&quot;$(NsdcTool)&quot; -r -i &quot;$(NsdSchemaDir)&quot; -o &quot;$(NsdOutputDir)&quot;" />
+    <ItemGroup>
+      <NsdGenerated Include="$(NsdOutputDir)/**/*.cs" />
+    </ItemGroup>
+    <PrependNullableDirective Files="@(NsdGenerated)" />
     <ItemGroup>
       <!--
         Target-time include: an eval-time glob sees an empty dir on a first

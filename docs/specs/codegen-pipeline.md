@@ -15,13 +15,18 @@ Source of truth: [NsdRpc/NsdRpc.csproj:62-74](../../NsdRpc/NsdRpc.csproj).
 3. The target deletes `CodeGen/Output/`, recreates it, and runs
    `nsdc -r -i Nsd -o CodeGen/Output`. This cleans stale generated files when
    a schema loses a type.
-4. The target adds the generated `.cs` files to `Compile` at target time.
+4. The target prepends `#nullable enable` to every generated file. nsdc 1.3.3
+   emits nullable annotations without the directive, which fails the build
+   with CS8669. The step is a workaround. Remove it when nsdc emits the
+   directive itself. See
+   [issue 0009](../issues/0009-nsdc-nullable-directive.md).
+5. The target adds the generated `.cs` files to `Compile` at target time.
    An eval-time glob would see an empty directory on a first build.
-5. The library sets `BuildInParallel` to `false`
+6. The library sets `BuildInParallel` to `false`
    ([csproj:23](../../NsdRpc/NsdRpc.csproj)). The target rewrites a shared
    directory. Parallel per-framework builds would race on it. The codegen
    therefore runs once per framework, in order.
-6. `CodeGen/Output/` is untracked. See [.gitignore](../../.gitignore).
+7. `CodeGen/Output/` is untracked. See [.gitignore](../../.gitignore).
 
 The codegen also runs in IDE design-time builds. An IDE needs `nsdc` on the
 PATH for full IntelliSense on generated types.
@@ -35,7 +40,7 @@ PATH for full IntelliSense on generated types.
 
 Each workflow downloads the pinned nsdc release and adds it to the PATH.
 
-- Version pin: `NSDC_VERSION` in each workflow. Current: `1.3.2`.
+- Version pin: `NSDC_VERSION` in each workflow. Current: `1.3.3`.
 - Download source: the needlefish GitHub releases.
 
 The tests pin the pipeline end to end. CI builds fail when codegen fails.

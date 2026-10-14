@@ -8,7 +8,7 @@ on:
 
 env:
   # Pin the nsdc compiler. Bump together with the needlefish release.
-  NSDC_VERSION: 1.3.2
+  NSDC_VERSION: 1.3.3
 
 jobs:
   publish:
