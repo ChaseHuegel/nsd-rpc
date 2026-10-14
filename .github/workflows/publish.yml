@@ -13,6 +13,9 @@ env:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
 
@@ -34,7 +37,20 @@ jobs:
       - name: Pack
         run: |
           dotnet pack NsdRpc/NsdRpc.csproj --configuration Release -o ./.packages/
+          dotnet pack NsdRpc.Tcp/NsdRpc.Tcp.csproj --configuration Release -o ./.packages/
           dotnet pack NsdRpc.Generators/NsdRpc.Generators.csproj --configuration Release -o ./.packages/
 
+      - name: NuGet login (OIDC to temporary API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          # The nuget.org profile name, not the email address.
+          user: ${{ secrets.NUGET_USER }}
+
       - name: Push to NuGet
-        run: dotnet nuget push ./.packages/*.nupkg --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json
+        run: |
+          for package in ./.packages/*.nupkg; do
+            dotnet nuget push "$package" \
+              --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
+              --source https://api.nuget.org/v3/index.json
+          done

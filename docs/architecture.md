@@ -34,11 +34,12 @@ the current schema. The RPC envelope builds on the format. See
 
 ## NuGet packaging
 
-Package metadata lives in
-[NsdRpc/NsdRpc.csproj:26-36](../../NsdRpc/NsdRpc.csproj). Version is set
-there. Pack with `dotnet pack NsdRpc/NsdRpc.csproj -o ./.packages/`. CI packs
-and pushes to nuget.org only on `v*` tags. See
-[.github/workflows/publish.yml](../../.github/workflows/publish.yml).
+Three packages ship: `NsdRpc`, `NsdRpc.Tcp`, and `NsdRpc.Generators`. Each
+carries its own package metadata and `Version` in its csproj. Pack with
+`dotnet pack` per project, or let CI do it. CI packs and pushes to
+nuget.org only on `v*` tags, using trusted publishing. See
+[.github/workflows/publish.yml](../../.github/workflows/publish.yml) and
+[development](development.md).
 
 ## Static analysis
 

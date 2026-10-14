@@ -45,6 +45,26 @@ reference it as an analyzer:
 The generator emits typed service clients. See
 [specs/rpc-api](specs/rpc-api.md).
 
+## Publishing
+
+Publishing runs on `v*` tags only. The workflow uses NuGet trusted
+publishing. It exchanges a GitHub OIDC token for a short-lived NuGet API
+key. No long-lived secret is stored.
+
+To publish a package the first time:
+
+1. Bump the `Version` property in the package csproj.
+2. Tag the commit. Example: `v0.1.0`.
+3. In nuget.org, add a trusted publisher for the package. Enter the GitHub
+   owner, the repository, and `.github/workflows/publish.yml`. Do this once
+   per package. The repository ships three: `NsdRpc`, `NsdRpc.Tcp`, and
+   `NsdRpc.Generators`.
+4. Store the nuget.org profile name as the `NUGET_USER` secret in the
+   repository. Use the profile name, not the email address.
+
+The push step uses the temporary key from the login step. It never reads a
+stored API key.
+
 ## Code style
 
 All hand-written code follows Tiger Style and the Power of 10, mapped to C#.
