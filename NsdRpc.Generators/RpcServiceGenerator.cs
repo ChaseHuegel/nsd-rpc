@@ -808,19 +808,26 @@ public sealed class RpcServiceGenerator : IIncrementalGenerator
             sb.Append(indent).Append("            ").Append(resultType).AppendLine(".Success(default));");
             sb.Append(indent).AppendLine("    }");
             sb.AppendLine();
-            sb.Append(indent).Append("    public abstract void ").Append(method.Name).AppendLine("(");
+            sb.Append(indent).Append("    public virtual void ").Append(method.Name).AppendLine("(");
             sb.Append(indent).Append("        ").Append(method.RequestType).AppendLine(" request,");
             sb.Append(indent).AppendLine("        global::NsdRpc.RpcContext context,");
-            sb.Append(indent).AppendLine("        global::System.Threading.CancellationToken cancellationToken);");
+            sb.Append(indent).AppendLine("        global::System.Threading.CancellationToken cancellationToken)");
+            sb.Append(indent).AppendLine("    {");
+            sb.Append(indent).AppendLine("    }");
         }
         else
         {
             sb.Append(indent).Append("        => ").Append(method.Name).AppendLine("(request, context, cancellationToken);");
             sb.AppendLine();
-            sb.Append(indent).Append("    public abstract ").Append(returnType).Append(' ').Append(method.Name).AppendLine("(");
+            sb.Append(indent).Append("    public virtual ").Append(returnType).Append(' ').Append(method.Name).AppendLine("(");
             sb.Append(indent).Append("        ").Append(method.RequestType).AppendLine(" request,");
             sb.Append(indent).AppendLine("        global::NsdRpc.RpcContext context,");
-            sb.Append(indent).AppendLine("        global::System.Threading.CancellationToken cancellationToken);");
+            sb.Append(indent).AppendLine("        global::System.Threading.CancellationToken cancellationToken)");
+            sb.Append(indent).AppendLine("    {");
+            sb.Append(indent).Append("        return new ").Append(returnType).AppendLine("(");
+            sb.Append(indent).Append("            ").Append(resultType)
+                .AppendLine(".Failure((int)global::NsdRpc.RpcErrorCode.InternalError, \"not implemented\"));");
+            sb.Append(indent).AppendLine("    }");
         }
     }
 

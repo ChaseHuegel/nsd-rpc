@@ -23,3 +23,11 @@ deployment-role ambiguity.
 - [x] Diagnostics: shape mixing, duplicate request types on the handler base, a duplicate id within the same role, and a stream chunk type mismatch. Shape mixing surfaces as RSG1006; the others are RSG1010 and RSG1011.
 - [x] The per-method `{MethodName}Handler` bases are removed.
 - [x] Tests are rewritten around the two shapes and the duplex pair.
+
+## Notes
+
+The handler base is `abstract` but its handler members are `virtual` with
+defaults: a partial implementer overrides only what it handles. An unhandled
+call answers `InternalError`, an unhandled notification is a no-op. This
+came from the sample: a client handling only the chat notification still
+subclasses the same base and overrides just that one member.

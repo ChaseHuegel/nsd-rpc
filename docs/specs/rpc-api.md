@@ -337,10 +337,12 @@ public interface IChat
 }
 ```
 
-`ChatClient` is the invokable proxy. `ChatHandler` is one abstract base
-implementing the handler shapes, `IRpcServiceRegistrar`, and one
-`IRpcHandler` per method. A duplex method is an invocation and a handler
-sharing one id. Register a concrete subclass with `AddService`:
+`ChatClient` is the invokable proxy. `ChatHandler` is one base implementing
+the handler shapes, `IRpcServiceRegistrar`, and one `IRpcHandler` per
+method. Its handler members are `virtual`, so a partial implementer
+overrides only what it handles: an unhandled call answers `InternalError`,
+an unhandled notification is a no-op. A duplex method is an invocation and
+a handler sharing one id. Register a concrete subclass with `AddService`:
 
 ```csharp
 public sealed class MyChatHandler : ChatHandler

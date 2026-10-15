@@ -9,8 +9,7 @@ static async Task<int> RunAsync()
 {
     var peers = new ConcurrentDictionary<ulong, RpcPeer>();
     var registry = new RpcRegistry();
-    registry.Add(new MyListUsersHandler());
-    registry.Add(new ChatRelayHandler(peers));
+    registry.AddService(new MyChatHandler(peers));
     registry.Freeze();
 
     var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
@@ -30,15 +29,14 @@ static async Task<int> RunAsync()
     RpcClient local = await ConnectAsync(transport.Port, string.Empty);
     RpcClient bot = await ConnectAsync(transport.Port, "[bot] ");
 
-    // The generated client forwards through the IRpcCaller interface.
-    var localService = new ChatServiceClient(local);
-    var botService = new ChatServiceClient(bot);
+    var localChat = new ChatClient(local);
+    var botChat = new ChatClient(bot);
 
     Console.WriteLine("users:");
-    RpcResult<ListUsersResponse> list = await localService.ListUsersAsync(new ListUsersRequest(0), new UserSink());
+    RpcResult<ListUsersResponse> list = await localChat.ListUsersAsync(new ListUsersRequest(0), new UserSink());
     Console.WriteLine(list.IsSuccess ? $"total: {list.Value.Total}" : $"list failed: {(RpcErrorCode)list.ErrorCode}");
 
-    RpcStreamSession<User, ListUsersResponse> botList = botService.ListUsersAsync(new ListUsersRequest(0));
+    RpcStreamSession<User, ListUsersResponse> botList = botChat.ListUsersAsync(new ListUsersRequest(0));
     await foreach (User user in botList.Chunks)
     {
         Console.WriteLine($"[bot]   {user.Id}: {user.Name}");
@@ -50,11 +48,11 @@ static async Task<int> RunAsync()
         Console.WriteLine($"[bot] total: {botResult.Value.Total}");
     }
 
-    botService.NotifyChat(new ChatMessage("bot", "hello everyone"));
+    botChat.NotifyChat(new ChatMessage("bot", "hello everyone"));
 
     Console.WriteLine("[bot] cancelling a stream partway...");
     using var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(800));
-    RpcResult<ListUsersResponse> cancelled = await botService.ListUsersAsync(
+    RpcResult<ListUsersResponse> cancelled = await botChat.ListUsersAsync(
         new ListUsersRequest(0), new UserSink("[bot] "), cancellationToken: cancel.Token);
     Console.WriteLine($"[bot] cancelled stream: {(RpcErrorCode)cancelled.ErrorCode}");
 
@@ -77,7 +75,7 @@ static async Task<int> RunAsync()
 
         if (line.Length > 0)
         {
-            localService.NotifyChat(new ChatMessage("me", line));
+            localChat.NotifyChat(new ChatMessage("me", line));
         }
     }
 
@@ -90,16 +88,15 @@ static async Task<RpcClient> ConnectAsync(int port, string prefix)
     var connection = new TcpClientConnection(new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = port });
     await connection.ConnectAsync();
     var registry = new RpcRegistry();
-    registry.Add(new ChatPrinter(prefix));
+    registry.AddService(new ChatPrinter(prefix));
     registry.Freeze();
     return new RpcClient(connection, registry);
 }
 
-// The generated ListUsersAsyncHandler base carries the RpcMethod attribute, so
-// this subclass registers without repeating the id.
-public sealed class MyListUsersHandler : ListUsersAsyncHandler
+// The server implements every handler: stream the users and relay chat.
+public sealed class MyChatHandler(ConcurrentDictionary<ulong, RpcPeer> peers) : ChatHandler
 {
-    protected override async ValueTask<RpcResult<ListUsersResponse>> ListUsersAsync(
+    public override async ValueTask<RpcResult<ListUsersResponse>> ListUsersAsync(
         ListUsersRequest request, RpcContext context, CancellationToken cancellationToken)
     {
         int count = request.MaxItems > 0 ? Math.Min(request.MaxItems, FakeUsers.All.Count) : FakeUsers.All.Count;
@@ -111,26 +108,20 @@ public sealed class MyListUsersHandler : ListUsersAsyncHandler
 
         return RpcResult<ListUsersResponse>.Success(new ListUsersResponse(count));
     }
-}
 
-// Notifications use the generated handler base. The relay rebroadcasts through
-// the generated client, which also exercises the RpcPeer constructor.
-public sealed class ChatRelayHandler(ConcurrentDictionary<ulong, RpcPeer> peers) : NotifyChatHandler
-{
-    protected override void NotifyChat(
-        ChatMessage message, RpcContext context, CancellationToken cancellationToken)
+    public override void OnNotifyChat(ChatMessage message, RpcContext context, CancellationToken cancellationToken)
     {
         foreach (RpcPeer peer in peers.Values)
         {
-            new ChatServiceClient(peer).NotifyChat(message);
+            new ChatClient(peer).NotifyChat(message);
         }
     }
 }
 
-public sealed class ChatPrinter(string prefix) : NotifyChatHandler
+// A partial handler: the client overrides only the notification it receives.
+public sealed class ChatPrinter(string prefix) : ChatHandler
 {
-    protected override void NotifyChat(
-        ChatMessage message, RpcContext context, CancellationToken cancellationToken)
+    public override void OnNotifyChat(ChatMessage message, RpcContext context, CancellationToken cancellationToken)
     {
         Console.WriteLine(prefix + message.Author + ": " + message.Text);
     }

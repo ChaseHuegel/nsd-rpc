@@ -94,8 +94,8 @@ public sealed class RpcServiceGeneratorTests
         Assert.Contains(
             "registry.Add<global::NsdRpc.Wire.Envelope, global::NsdRpc.RpcUnit>(this, 101UL, global::NsdRpc.RpcDirection.Both);",
             text);
-        Assert.Contains("public abstract global::System.Threading.Tasks.ValueTask<global::NsdRpc.RpcResult<global::NsdRpc.Wire.Handshake>> EchoAsync(", text);
-        Assert.Contains("public abstract void OnNotifyChat(", text);
+        Assert.Contains("public virtual global::System.Threading.Tasks.ValueTask<global::NsdRpc.RpcResult<global::NsdRpc.Wire.Handshake>> EchoAsync(", text);
+        Assert.Contains("public virtual void OnNotifyChat(", text);
         Assert.Contains("if (context.RequestId != 0UL)", text);
         Assert.Contains(result.Results[0].GeneratedSources, s => s.HintName == "NsdRpc.RpcUnit.g.cs");
         Assert.DoesNotContain(result.Results[0].GeneratedSources, s => s.HintName == "ChatClient.g.cs");
@@ -128,7 +128,7 @@ public sealed class RpcServiceGeneratorTests
         Assert.DoesNotContain(": global::IChat", client);
         Assert.DoesNotContain(": global::IChat", handler);
         Assert.Contains("public void NotifyChat(", client);
-        Assert.Contains("public abstract void OnNotifyChat(", handler);
+        Assert.Contains("public virtual void OnNotifyChat(", handler);
     }
 
     [Theory]
