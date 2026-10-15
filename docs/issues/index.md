@@ -29,6 +29,7 @@ add or work an issue.
 - [x] [Service registration and stream declaration](/docs/issues/0017-service-registration.md) — id-explicit `Add`, `AddService`, and `RpcMethodAttribute.Streams`.
 - [x] [Shape-based client and handler generation](/docs/issues/0018-shape-based-generation.md) — invocation shapes make the client, handler shapes make one `{Name}Handler` base.
 - [x] [Rewrite the generated chat sample on one duplex interface](/docs/issues/0019-duplex-chat-sample.md) — the sample adopts the single-interface duplex shape.
+- [ ] [Migrate schema generation to the needlefish source generator](/docs/issues/0021-migrate-to-needlefish-generator.md) — drop the nsdc build step for `Needlefish.Generators`.
 
 ### Research
 
