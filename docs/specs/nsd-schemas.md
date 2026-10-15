@@ -1,7 +1,7 @@
 # nsd Schemas and Wire Format
 
-One subject: the nsd schema files in this repo, the types nsdc generates from
-them, and the wire format they define.
+One subject: the nsd schema files in this repo, the types the needlefish
+source generator produces from them, and the wire format they define.
 
 ## Source of truth
 
@@ -49,8 +49,8 @@ subset. See
 
 ## Generated shape
 
-nsdc generates one C# struct per message in `NsdRpc/CodeGen/Output/`. Each
-struct has:
+The generator produces one C# struct per message at compile time. Each struct
+has:
 
 - One public field per schema field.
 - A constructor taking every field.
@@ -71,7 +71,7 @@ these rules in hand-written code. Call the generated methods.
 ## Adding a type
 
 1. Add the message or enum to a `*.nsd` file in `NsdRpc/Nsd/`.
-2. Build. The codegen runs and generates the type.
+2. Build. The generator produces the type.
 3. Pin the behavior with a test in `NsdRpc.Tests`.
 
 The round-trip contract is pinned by

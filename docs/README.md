@@ -12,7 +12,7 @@ Fetch only the doc you need. Never fetch the whole tree.
 | nsd schemas and the wire format | [specs/nsd-schemas](specs/nsd-schemas.md) |
 | RPC wire protocol and envelope | [specs/rpc-protocol](specs/rpc-protocol.md) |
 | RPC engine and handler API | [specs/rpc-api](specs/rpc-api.md) |
-| The nsdc build pipeline | [specs/codegen-pipeline](specs/codegen-pipeline.md) |
+| Schema generation and the needlefish source generator | [specs/codegen-pipeline](specs/codegen-pipeline.md) |
 | Issue format and workflow | [specs/issues](specs/issues.md) |
 
 ## Live index

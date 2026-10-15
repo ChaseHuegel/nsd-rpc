@@ -5,18 +5,12 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- nsdc-generated code uses raw pointers. -->
+    <!-- Generated code uses raw pointers. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <RootNamespace>NsdRpc</RootNamespace>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
     <AnalysisLevel>latest</AnalysisLevel>
-    <!--
-      Build TFMs one at a time. The NsdcCodegen target rewrites the shared
-      CodeGen/Output dir; parallel inner builds would race on it.
-      See docs/specs/codegen-pipeline.md.
-    -->
-    <BuildInParallel>false</BuildInParallel>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -33,8 +27,17 @@
 
   <ItemGroup>
     <None Include="../README.md" Pack="true" PackagePath="/" />
-    <!-- Schemas are source of truth for the wire format; the output is untracked. -->
+    <!-- Schemas are the source of truth for the wire format. -->
     <None Include="Nsd/**/*.nsd" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      The needlefish source generator compiles the schemas at build time.
+      Build-time only: it is not a shipped dependency, so the package keeps
+      its zero-dependency property. See docs/specs/codegen-pipeline.md.
+    -->
+    <PackageReference Include="Needlefish.Generators" Version="1.2.0" PrivateAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
@@ -42,31 +45,5 @@
       <_Parameter1>NsdRpc.Tests</_Parameter1>
     </AssemblyAttribute>
   </ItemGroup>
-
-  <!--
-    nsdc codegen. See docs/specs/codegen-pipeline.md for the full contract.
-    Runs before CoreCompile in every compiling project instance, so generated
-    types exist before any compile step, including on a fresh clone and for
-    -f builds. nsdc must be on PATH.
-  -->
-  <PropertyGroup>
-    <NsdSchemaDir>$(MSBuildProjectDirectory)/Nsd</NsdSchemaDir>
-    <NsdOutputDir>$(MSBuildProjectDirectory)/CodeGen/Output</NsdOutputDir>
-    <NsdcTool Condition="'$(NsdcTool)' == ''">nsdc</NsdcTool>
-  </PropertyGroup>
-
-  <Target Name="NsdcCodegen" BeforeTargets="CoreCompile">
-    <RemoveDir Directories="$(NsdOutputDir)" />
-    <MakeDir Directories="$(NsdOutputDir)" />
-    <Exec Command="&quot;$(NsdcTool)&quot; -r -i &quot;$(NsdSchemaDir)&quot; -o &quot;$(NsdOutputDir)&quot;" />
-    <ItemGroup>
-      <!--
-        Target-time include: an eval-time glob sees an empty dir on a first
-        build. KeepDuplicates avoids re-adding files the default compile glob
-        already picked up.
-      -->
-      <Compile Include="CodeGen/Output/**/*.cs" KeepDuplicates="false" />
-    </ItemGroup>
-  </Target>
 
 </Project>

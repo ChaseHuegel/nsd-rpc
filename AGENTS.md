@@ -8,14 +8,14 @@ anything.
 | Path | What it is |
 |---|---|
 | `.github/workflows/` | CI/CD: build, test, and publish (publish runs on `v*` tags only). |
-| `NsdRpc/` | The library. Zero dependencies. Holds the nsd schemas and codegen wiring. |
+| `NsdRpc/` | The library. Zero dependencies. Holds the nsd schemas. |
 | `NsdRpc.Tests/` | xunit tests. |
 | `docs/` | The documentation system. Subject index at `docs/README.md`. |
 | `AGENTS.md` | This file. |
 | `LICENSE` | MIT. |
 | `README.md` | Project front page. |
 | `NsdRpc.sln` | The solution. |
-| `.gitignore` | Ignored paths, including the generated code output. |
+| `.gitignore` | Ignored paths. |
 
 ## First stops
 
@@ -27,15 +27,14 @@ anything.
 | Understand the project layout | [docs/architecture.md](docs/architecture.md) |
 | Change the wire format or add a message | [docs/specs/nsd-schemas.md](docs/specs/nsd-schemas.md) |
 | Work on the RPC protocol or engine | [docs/specs/rpc-protocol.md](docs/specs/rpc-protocol.md) |
-| Touch the build pipeline or bump nsdc | [docs/specs/codegen-pipeline.md](docs/specs/codegen-pipeline.md) |
+| Touch schema generation or bump the generator | [docs/specs/codegen-pipeline.md](docs/specs/codegen-pipeline.md) |
 | Find or add work | [docs/issues/index.md](docs/issues/index.md) |
 
 ## Quality gates
 
 Run these before you finish any change:
 
-- `dotnet build` succeeds with zero warnings. Warnings are errors. `nsdc`
-  must be on the PATH.
+- `dotnet build` succeeds with zero warnings. Warnings are errors.
 - `dotnet test` passes. Tests must exercise edge cases per
   [docs/testing.md](docs/testing.md). No flimsy tests.
 - The docs pass is done. Stale docs are a bug. See
@@ -46,10 +45,10 @@ Run these before you finish any change:
 - Fetch only the doc you need via the index. Never fetch the whole tree.
 - Follow [docs/specs/coding-style.md](docs/specs/coding-style.md) for all
   hand-written code.
-- Never hand-edit files under `NsdRpc/CodeGen/Output/`. Edit the `.nsd`
-  schema instead. The output directory is untracked.
-- The library has zero dependencies. Do not add a package reference to
-  `NsdRpc/NsdRpc.csproj`.
+- Change the wire types only through the `.nsd` schema. See
+  [docs/specs/nsd-schemas.md](docs/specs/nsd-schemas.md).
+- The library has zero runtime dependencies. Build-time tooling is a
+  `PrivateAssets` reference and does not ship.
 - Validate every parameter and check every return value. Handle every error.
 - Work one issue at a time. Follow
   [docs/specs/issues.md](docs/specs/issues.md). Report adjacent problems to

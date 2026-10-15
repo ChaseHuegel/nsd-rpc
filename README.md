@@ -2,8 +2,8 @@
 
 A zero-dependency C# RPC framework and library built on
 [Needlefish](https://github.com/ChaseHuegel/needlefish) (nsd). Schemas in
-`.nsd` files define the wire messages. The `nsdc` compiler generates the C#
-structs at build time.
+`.nsd` files define the wire messages. The `Needlefish.Generators` source
+generator compiles them at build time.
 
 [![build](https://github.com/ChaseHuegel/nsd-rpc/actions/workflows/build.yml/badge.svg)](https://github.com/ChaseHuegel/nsd-rpc/actions/workflows/build.yml)
 [![test](https://github.com/ChaseHuegel/nsd-rpc/actions/workflows/test.yml/badge.svg)](https://github.com/ChaseHuegel/nsd-rpc/actions/workflows/test.yml)
@@ -19,16 +19,14 @@ dotnet add package NsdRpc
 Prerequisites:
 
 - .NET 10 SDK
-- `nsdc` on the PATH. Get it from the
-  [needlefish releases](https://github.com/ChaseHuegel/needlefish/releases).
 
 ```bash
 dotnet build
 dotnet test
 ```
 
-The build runs `nsdc` on `NsdRpc/Nsd/*.nsd` before every compile. Generated
-types land in `NsdRpc/CodeGen/Output/` and join the compile automatically.
+The build compiles `NsdRpc/Nsd/*.nsd` with the `Needlefish.Generators` source
+generator. There is no separate compiler step.
 
 ## Docs
 

@@ -22,18 +22,17 @@ The libraries target `netstandard2.1;net10.0`. The generator targets
 
 ## Build pipeline
 
-The build runs `nsdc` on the schemas in `NsdRpc/Nsd/` before every compile.
-Generated types land in `NsdRpc/CodeGen/Output/` and join the compile.
-The output is untracked. See
+The `Needlefish.Generators` source generator compiles the schemas in
+`NsdRpc/Nsd/` at build time. There is no separate compiler step. See
 [specs/codegen-pipeline](specs/codegen-pipeline.md) for the full contract.
 
 ## Wire format
 
 The wire format is nsd (Needlefish Schema Definition). Schemas are the source
-of truth. nsdc compiles them into C# structs with serialize and deserialize
-methods. See [specs/nsd-schemas](specs/nsd-schemas.md) for the contract and
-the current schema. The RPC envelope builds on the format. See
-[specs/rpc-protocol](specs/rpc-protocol.md).
+of truth. The needlefish source generator compiles them into C# structs with
+serialize and deserialize methods. See [specs/nsd-schemas](specs/nsd-schemas.md)
+for the contract and the current schema. The RPC envelope builds on the format.
+See [specs/rpc-protocol](specs/rpc-protocol.md).
 
 ## NuGet packaging
 

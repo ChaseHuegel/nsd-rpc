@@ -177,9 +177,8 @@ No `this.` qualification. `== null` and `!= null`, not `is null`.
 
 ## Exemptions
 
-- The nsdc-generated files under `NsdRpc/CodeGen/Output/` are not
-  hand-written. Style rules do not apply. Unsafe is allowed there. The
-  library keeps `AllowUnsafeBlocks` for them. See
+- The generated wire types are not hand-written. Style rules do not apply.
+  Unsafe is allowed there. The library keeps `AllowUnsafeBlocks` for them. See
   [NsdRpc/NsdRpc.csproj:9](../../NsdRpc/NsdRpc.csproj).
 - Never edit generated files. Change the schema. See
   [nsd-schemas](nsd-schemas.md).

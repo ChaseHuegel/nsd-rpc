@@ -1,51 +1,46 @@
-# nsdc Build Pipeline
+# Schema Generation
 
-One subject: how the build runs the `nsdc` compiler and how generated types
-join the compile. This wiring is arcane. Change it only with a test.
+One subject: how the needlefish source generator produces the wire types from
+the schema files. There is no separate compiler step.
 
 ## Contract
 
-Source of truth: [NsdRpc/NsdRpc.csproj:58](../../NsdRpc/NsdRpc.csproj).
+Source of truth: [NsdRpc/NsdRpc.csproj:40](../../NsdRpc/NsdRpc.csproj).
 
-1. `nsdc` must be on the PATH. The build fails without it. That is the
-   contract.
-2. The `NsdcCodegen` target runs before `CoreCompile` in every compiling
-   project instance. Generated types exist before any compile step, including
-   on a fresh clone and for `-f` builds.
-3. The target deletes `CodeGen/Output/`, recreates it, and runs
-   `nsdc -r -i Nsd -o CodeGen/Output`. This cleans stale generated files when
-   a schema loses a type.
-4. The target adds the generated `.cs` files to `Compile` at target time.
-   An eval-time glob would see an empty directory on a first build.
-5. The library sets `BuildInParallel` to `false`
-   ([csproj:23](../../NsdRpc/NsdRpc.csproj)). The target rewrites a shared
-   directory. Parallel per-framework builds would race on it. The codegen
-   therefore runs once per framework, in order.
-6. `CodeGen/Output/` is untracked. See [.gitignore](../../.gitignore).
-
-The codegen also runs in IDE design-time builds. An IDE needs `nsdc` on the
-PATH for full IntelliSense on generated types.
+1. The library references the `Needlefish.Generators` package with
+   `PrivateAssets="all"`. The generator compiles every `*.nsd` file in the
+   project during compilation.
+2. The reference is build-time only. It is not a shipped dependency, so the
+   `NsdRpc` package keeps its zero-dependency property.
+3. The generator discovers `**/*.nsd` automatically. Editing a schema updates
+   IntelliSense without a rebuild.
+4. The library keeps `AllowUnsafeBlocks` because the generated code uses raw
+   pointers. The generated code compiles against `netstandard2.1`.
 
 ## Overrides
 
-- `NsdcTool` property: a custom path to the compiler. Default `nsdc`. See
-  [csproj:55](../../NsdRpc/NsdRpc.csproj).
+- `NeedlefishPartial` property: generate the types with the `partial`
+  keyword. Default `false`.
+- `NeedlefishEnableDefaultItems`: set to `false` to manage the file list
+  yourself through `AdditionalFiles`.
+- Per-file `NsdFiles` metadata sets an option for a single schema.
+
+The full option list lives in the
+[needlefish README](https://github.com/ChaseHuegel/needlefish#readme).
+
+## Version pin
+
+The generator version is pinned in the csproj files, not in the workflows.
+Current: `1.2.0`. Bump it in `NsdRpc/NsdRpc.csproj` and
+`samples/Chat.Common/Chat.Common.csproj` together.
 
 ## CI
 
-Each workflow downloads the pinned nsdc release and adds it to the PATH.
+CI runs `dotnet build` and `dotnet test`. No compiler install step is needed;
+restore pulls the generator package. The tests pin the generated code end to
+end. See [NsdRpc.Tests/HandshakeTests.cs:8](../../NsdRpc.Tests/HandshakeTests.cs).
 
-- Version pin: `NSDC_VERSION` in each workflow. Current: `1.3.4`.
-- Download source: the needlefish GitHub releases.
+## Bumping the generator
 
-The tests pin the pipeline end to end. CI builds fail when codegen fails.
-See [NsdRpc.Tests/HandshakeTests.cs:8](../../NsdRpc.Tests/HandshakeTests.cs).
-
-## Bumping nsdc
-
-1. Change `NSDC_VERSION` in
-   [build.yml](../../.github/workflows/build.yml),
-   [test.yml](../../.github/workflows/test.yml), and
-   [publish.yml](../../.github/workflows/publish.yml).
-2. Update the pinned version in [development.md](../development.md).
-3. Build and test locally with the new compiler.
+1. Change the `Needlefish.Generators` version in both csproj files.
+2. Build and test. The wire-contract tests fail if the output drifts.

@@ -10,10 +10,9 @@ The testing rules live in [testing](testing.md).
 
 - Use the .NET 10 SDK. The library targets `netstandard2.1;net10.0`. Tests
   target `net10.0`.
-- The `nsdc` compiler must be on your PATH. Pin the version used by CI:
-  currently v1.3.4 from the
-  [needlefish releases](https://github.com/ChaseHuegel/needlefish/releases).
-  Bump `NSDC_VERSION` in the workflows when you bump it here.
+- Schema generation comes from the `Needlefish.Generators` NuGet package.
+  Restore pulls it. No compiler install is needed. Pin the version in the
+  csproj files. See [specs/codegen-pipeline](specs/codegen-pipeline.md).
 - No `global.json`, `Directory.Build.props`, or `.editorconfig` exist. Each
   `.csproj` is self-contained.
 - No lint, format, or typecheck scripts. `dotnet build` is the check. It
@@ -24,16 +23,15 @@ The testing rules live in [testing](testing.md).
 ## Build and test
 
 ```bash
-dotnet build                                        # runs nsdc codegen first
+dotnet build
 dotnet build --configuration Release
 dotnet test                                         # xunit, edge-case tests
 dotnet pack NsdRpc/NsdRpc.csproj -o ./.packages/    # NuGet package
 dotnet pack NsdRpc.Generators/NsdRpc.Generators.csproj -o ./.packages/
 ```
 
-The build runs `nsdc` before any compile step. Generated code lands in
-`NsdRpc/CodeGen/Output/`, which is untracked. See
-[specs/codegen-pipeline](specs/codegen-pipeline.md) for the full contract.
+The build compiles the schemas with the `Needlefish.Generators` source
+generator. See [specs/codegen-pipeline](specs/codegen-pipeline.md).
 
 The `NsdRpc.Generators` package is a source generator. Consuming projects
 reference it as an analyzer:
@@ -73,9 +71,8 @@ doc on style questions.
 
 Repo-specific rules:
 
-- Never hand-edit `.cs` files under `NsdRpc/CodeGen/Output/`. Change the
-  `.nsd` schema instead. See [specs/nsd-schemas](specs/nsd-schemas.md).
-- Never commit the output directory.
+- Never hand-edit generated wire types. Change the `.nsd` schema instead. See
+  [specs/nsd-schemas](specs/nsd-schemas.md).
 
 ## Testing
 

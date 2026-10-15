@@ -15,5 +15,5 @@ Run one with:
 dotnet run --project samples/Chat.Raw
 ```
 
-Both need `nsdc` on the PATH. See
-[docs/specs/codegen-pipeline.md](../docs/specs/codegen-pipeline.md).
+Both compile their schemas with the `Needlefish.Generators` source generator.
+No compiler install is needed.
