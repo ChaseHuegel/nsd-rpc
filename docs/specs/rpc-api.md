@@ -311,89 +311,78 @@ The wrapper lives in
 
 A source generator in the
 [NsdRpc.Generators](../../NsdRpc.Generators/NsdRpc.Generators.csproj) project
-turns an attributed interface into a typed client. Reference the generator
-as an analyzer and mark the interface with `[RpcService]`. The generator
-emits the marker and a `{Name}Client` class in the same namespace.
+turns a `[RpcService]` interface into two types. Reference the generator as
+an analyzer and mark the interface. The shape of each method decides its
+role: an invocation shape has no `RpcContext`, a handler shape has one.
 
 ```csharp
 [RpcService]
-public interface IListService
+public interface IChat
 {
-    [RpcMethod(Methods.List)]
-    Task<RpcResult<ListResponse>> ListAsync(
-        ListRequest request, CancellationToken cancellationToken = default);
+    // Invocation shapes become invokable members on ChatClient.
+    [RpcMethod(Methods.ListUsers)]
+    RpcStreamSession<User, ListUsersResponse> ListUsersAsync(
+        ListUsersRequest request, CancellationToken cancellationToken = default);
 
-    [RpcMethod(Methods.ListStream)]
-    RpcStreamSession<ListItem, ListResponse> StreamListAsync(
-        ListRequest request, CancellationToken cancellationToken = default);
+    [RpcMethod(Methods.ChatMessage)]
+    void NotifyChat(ChatMessage message);
+
+    // Handler shapes become abstracts on ChatHandler.
+    [RpcMethod(Methods.ListUsers, Streams = typeof(User))]
+    ValueTask<RpcResult<ListUsersResponse>> ListUsersAsync(
+        ListUsersRequest request, RpcContext context, CancellationToken cancellationToken);
+
+    [RpcMethod(Methods.ChatMessage)]
+    void OnNotifyChat(ChatMessage message, RpcContext context, CancellationToken cancellationToken);
 }
 ```
 
-The client reads like an ordinary instance method:
+`ChatClient` is the invokable proxy. `ChatHandler` is one abstract base
+implementing the handler shapes, `IRpcServiceRegistrar`, and one
+`IRpcHandler` per method. A duplex method is an invocation and a handler
+sharing one id. Register a concrete subclass with `AddService`:
 
 ```csharp
-var list = new ListServiceClient(client);
-RpcResult<ListResponse> result = await list.ListAsync(new ListRequest("widgets", 100));
-```
-
-A second constructor takes an `RpcPeer`, so the same typed surface serves
-server-to-client calls through `RpcServer.GetPeer`:
-
-```csharp
-var list = new ListServiceClient(server.GetPeer(clientId)!);
-```
-
-Both constructors forward through the shared
-[IRpcCaller](../../NsdRpc/Engine/IRpcCaller.cs) interface, which `RpcClient`
-and `RpcPeer` both implement.
-
-The generator supports three method shapes. `Task<RpcResult<T>>` maps to a
-plain call. `RpcStreamSession<TChunk, T>` maps to a stream call. The same
-method with an `IChunkSink<TChunk>` parameter maps to the callback stream
-call. An optional `TimeSpan?` timeout parameter and a trailing
-`CancellationToken` forward to the underlying call. The result stays an
-`RpcResult<T>`. See [issue 0010](../issues/0010-rpc-service-generator.md).
-
-The same interface generates one `{MethodName}Handler` abstract base per
-method. A session and a sink overload share one base because they share the
-method id. The base implements `IRpcHandler<TRequest, TResponse>`, carries
-`[RpcMethod]`, and exposes the method as a protected typed method with the
-`RpcContext`, so streaming works through `context.Stream`.
-
-```csharp
-public sealed class MyListHandler : ListAsyncHandler
+public sealed class MyChatHandler : ChatHandler
 {
-    protected override ValueTask<RpcResult<ListResponse>> ListAsync(
-        ListRequest request, RpcContext context, CancellationToken cancellationToken)
+    public override async ValueTask<RpcResult<ListUsersResponse>> ListUsersAsync(
+        ListUsersRequest request, RpcContext context, CancellationToken cancellationToken)
     {
-        foreach (ListItem item in LoadItems(request))
+        foreach (User user in FakeUsers.All)
         {
-            context.Stream(item);
+            await Task.Delay(250, cancellationToken);
+            context.Stream(user);
         }
 
-        return new(RpcResult<ListResponse>.Success(new ListResponse(count)));
+        return RpcResult<ListUsersResponse>.Success(new ListUsersResponse(FakeUsers.All.Count));
+    }
+
+    public override void OnNotifyChat(ChatMessage message, RpcContext context, CancellationToken cancellationToken)
+    {
+        Console.WriteLine(message.Author + ": " + message.Text);
     }
 }
+
+registry.AddService(new MyChatHandler());
 ```
 
-`RpcRegistry.Add` reads `[RpcMethod]` through inheritance, so the concrete
-class registers without repeating the id. See
-[issue 0011](../issues/0011-rpc-service-handler-skeletons.md).
-
-A method returning `void` is a notification. It takes zero or one request
-parameter and generates a call to `Notify`:
+The client reads like an ordinary instance method, with a second constructor
+taking an `RpcPeer` for server-to-client calls:
 
 ```csharp
-[RpcMethod(Methods.ChatMessage)]
-void NotifyChat(ChatMessage message);
-
-[RpcMethod(Methods.Ping)]
-void Ping();
+var chat = new ChatClient(client);
+RpcResult<ListUsersResponse> result = await chat.ListUsersAsync(new ListUsersRequest(0));
 ```
 
-The generated client forwards to `Notify`; the `bool` rejection signal
-stays on the raw API. The generator also emits a `{MethodName}Handler` base
-that implements `IRpcHandler<TRequest, RpcUnit>`. The base refuses requests
-on a notification id with `MethodNotFound`, so the placeholder is never
-serialized. See [issue 0016](../issues/0016-generator-notification-shape.md).
+Invocation shapes are the same as before: `Task<RpcResult<T>>` is a plain
+call, `RpcStreamSession<TChunk, T>` is a stream, the `IChunkSink<TChunk>`
+overload is the callback stream, and `void` is a notification. A handler
+shape is `ValueTask<RpcResult<T>>` for a call and `void` for a notification.
+The handler's `Streams` declares the chunk type; the generator cross-checks
+it against the client's chunk type when both shapes share an id. A generated
+type implements the interface only when the interface is single-role; a
+mixed interface is a declaration consumed by the generator, not implemented
+by either type. `RpcDirection` stays optional, `Both` by default, and only
+affects dispatch enforcement. See
+[issue 0018](../issues/0018-shape-based-generation.md).
 

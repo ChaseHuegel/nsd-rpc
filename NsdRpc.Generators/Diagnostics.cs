@@ -69,4 +69,20 @@ internal static class Diagnostics
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor DuplicateRequestType = new(
+        id: "RSG1010",
+        title: "Duplicate handler request type",
+        messageFormat: "Handler methods '{0}' and '{1}' share the request type '{2}'",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor StreamTypeMismatch = new(
+        id: "RSG1011",
+        title: "Stream chunk type mismatch",
+        messageFormat: "The stream chunk type of '{0}' does not match the server's Streams declaration",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
 }

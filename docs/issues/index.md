@@ -27,7 +27,7 @@ add or work an issue.
 - [x] [Add the raw chat sample](/docs/issues/0014-raw-chat-sample.md) — the shared schema plus the bare-API console app.
 - [x] [Add the generated chat sample](/docs/issues/0015-generated-chat-sample.md) — the same pattern through the source generator.
 - [x] [Service registration and stream declaration](/docs/issues/0017-service-registration.md) — id-explicit `Add`, `AddService`, and `RpcMethodAttribute.Streams`.
-- [ ] [Shape-based client and handler generation](/docs/issues/0018-shape-based-generation.md) — invocation shapes make the client, handler shapes make one `{Name}Handler` base.
+- [x] [Shape-based client and handler generation](/docs/issues/0018-shape-based-generation.md) — invocation shapes make the client, handler shapes make one `{Name}Handler` base.
 - [ ] [Rewrite the generated chat sample on one duplex interface](/docs/issues/0019-duplex-chat-sample.md) — the sample adopts the single-interface duplex shape.
 
 ### Research

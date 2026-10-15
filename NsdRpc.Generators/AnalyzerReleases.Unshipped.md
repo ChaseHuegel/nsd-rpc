@@ -13,3 +13,5 @@ RSG1005 | NsdRpc.Generators | Error | Request parameter must be a struct
 RSG1006 | NsdRpc.Generators | Error | Unsupported service method return type
 RSG1007 | NsdRpc.Generators | Error | Response and chunk types must be structs
 RSG1008 | NsdRpc.Generators | Error | Duplicate method id
+RSG1010 | NsdRpc.Generators | Error | Duplicate handler request type
+RSG1011 | NsdRpc.Generators | Error | Stream chunk type mismatch
