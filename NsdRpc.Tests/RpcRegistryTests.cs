@@ -111,6 +111,53 @@ public sealed class RpcRegistryTests
     }
 
     [Fact]
+    public void AddWithExplicitIdRegisters()
+    {
+        var registry = new RpcRegistry();
+
+        registry.Add(new DerivedHandler(), 600UL, RpcDirection.ClientToServer);
+        registry.Freeze();
+
+        Assert.True(registry.TryGet(600, out HandlerEntry? entry));
+        Assert.Equal(RpcDirection.ClientToServer, entry.Direction);
+    }
+
+    [Fact]
+    public void AddWithExplicitIdFailsFastOnZeroAndDuplicate()
+    {
+        var registry = new RpcRegistry();
+
+        Assert.Throws<ArgumentException>(() => registry.Add(new DerivedHandler(), 0UL));
+        registry.Add(new DerivedHandler(), 600UL);
+
+        Assert.Throws<ArgumentException>(() => registry.Add(new DerivedHandler(), 600UL));
+    }
+
+    private sealed class Registrar : IRpcServiceRegistrar
+    {
+        public RpcRegistry? SeenRegistry { get; private set; }
+
+        public void RegisterHandlers(RpcRegistry registry)
+        {
+            SeenRegistry = registry;
+            registry.Add(new DerivedHandler(), 700UL);
+        }
+    }
+
+    [Fact]
+    public void AddServiceDelegatesToRegisterHandlers()
+    {
+        var registry = new RpcRegistry();
+        var registrar = new Registrar();
+
+        registry.AddService(registrar);
+        registry.Freeze();
+
+        Assert.Same(registry, registrar.SeenRegistry);
+        Assert.True(registry.TryGet(700, out _));
+    }
+
+    [Fact]
     public async Task ScanAssemblyRegistersMarkedHandlers()
     {
         var registry = new RpcRegistry();

@@ -252,13 +252,18 @@ public readonly struct RpcResult<T>
 public sealed class RpcRegistry
 {
     public void Add<TRequest, TResponse>(IRpcHandler<TRequest, TResponse> handler);
+    public void Add<TRequest, TResponse>(IRpcHandler<TRequest, TResponse> handler, ulong methodId, RpcDirection direction = RpcDirection.Both);
+    public void AddService(IRpcServiceRegistrar service);
     public void ScanAssembly(Assembly assembly);
     public void Freeze();
 }
 ```
 
-- `Add` reads the id from the attribute. A missing attribute, a zero id, or a
-  duplicate id fails fast.
+- `Add` reads the id from the attribute. The id-explicit overload takes the id
+  and direction directly and is what generated service bases use.
+- `AddService` calls the service's `RegisterHandlers`. Generated handler bases
+  implement `IRpcServiceRegistrar`.
+- A missing attribute, a zero id, or a duplicate id fails fast.
 - `ScanAssembly` instantiates marked classes that implement the handler
   interface with a parameterless constructor. A marked but non-conforming
   class fails fast.

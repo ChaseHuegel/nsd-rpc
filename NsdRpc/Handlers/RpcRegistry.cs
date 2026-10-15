@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Reflection;
 
 namespace NsdRpc;
@@ -50,6 +51,48 @@ public sealed class RpcRegistry
         }
     }
 
+    public void Add<TRequest, TResponse>(IRpcHandler<TRequest, TResponse> handler, ulong methodId, RpcDirection direction = RpcDirection.Both)
+        where TRequest : struct
+        where TResponse : struct
+    {
+        if (handler == null)
+        {
+            throw new ArgumentNullException(nameof(handler));
+        }
+
+        if (methodId == 0)
+        {
+            throw new ArgumentException("Method zero is not a valid method id.", nameof(methodId));
+        }
+
+        lock (_lock)
+        {
+            if (_frozen)
+            {
+                throw new InvalidOperationException("The registry is frozen.");
+            }
+
+            if (_entries.ContainsKey(methodId))
+            {
+                throw new ArgumentException("Duplicate method id " + methodId + ".", nameof(methodId));
+            }
+
+            var entry = new HandlerEntry<TRequest, TResponse>(
+                handler, PayloadSerializerCache<TRequest>.Value, direction);
+            _entries.Add(methodId, entry);
+        }
+    }
+
+    public void AddService(IRpcServiceRegistrar service)
+    {
+        if (service == null)
+        {
+            throw new ArgumentNullException(nameof(service));
+        }
+
+        service.RegisterHandlers(this);
+    }
+
     public void ScanAssembly(Assembly assembly)
     {
         if (assembly == null)
@@ -86,7 +129,8 @@ public sealed class RpcRegistry
 
             object instance = Activator.CreateInstance(type)!;
             Type[] arguments = handlerInterface.GetGenericArguments();
-            MethodInfo add = typeof(RpcRegistry).GetMethod(nameof(Add), BindingFlags.Public | BindingFlags.Instance)!;
+            MethodInfo add = typeof(RpcRegistry).GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Single(m => m.Name == nameof(Add) && m.GetParameters().Length == 1);
             add.MakeGenericMethod(arguments[0], arguments[1]).Invoke(this, [instance]);
         }
     }

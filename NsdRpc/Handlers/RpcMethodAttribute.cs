@@ -1,8 +1,8 @@
 namespace NsdRpc;
 
 /// <summary>
-/// Marks a handler class with its method id. The id is a wire contract.
-/// Never change it between builds.
+/// Marks a handler class or service method with its method id. The id is a
+/// wire contract. Never change it between builds.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
 public sealed class RpcMethodAttribute : Attribute
@@ -18,4 +18,9 @@ public sealed class RpcMethodAttribute : Attribute
 
     /// <summary>Which side may handle the method.</summary>
     public RpcDirection Direction { get; }
+
+    /// <summary>
+    /// The stream chunk type for a server handler. Null for a non-streaming method.
+    /// </summary>
+    public Type? Streams { get; set; }
 }
