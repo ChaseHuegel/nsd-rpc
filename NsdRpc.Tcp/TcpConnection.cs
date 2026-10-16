@@ -16,6 +16,7 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
     private readonly Socket _socket;
     private readonly TcpFrameDecoder _decoder;
     private readonly TcpOptions _tcpOptions;
+    private readonly ArrayPool<byte> _receiveBufferPool;
     private readonly RpcFrameHandler _onFrame;
     private readonly object _sendLock = new();
     private readonly Queue<SendBuffer> _sendQueue = new();
@@ -28,9 +29,18 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
     private int _disconnected;
 
     public TcpConnection(Socket socket, RpcOptions rpcOptions, TcpOptions tcpOptions)
+        : this(socket, rpcOptions, tcpOptions, ArrayPool<byte>.Shared)
+    {
+    }
+
+    // A test seam. The pool lets a test observe the per-read rent and the
+    // return on each receive path.
+    internal TcpConnection(
+        Socket socket, RpcOptions rpcOptions, TcpOptions tcpOptions, ArrayPool<byte> receiveBufferPool)
     {
         _socket = socket;
         _tcpOptions = tcpOptions;
+        _receiveBufferPool = receiveBufferPool;
         _decoder = new TcpFrameDecoder(rpcOptions.MaxFrameBytes);
         // One delegate for the connection. The receive loop must not allocate.
         _onFrame = OnFrame;
@@ -203,33 +213,18 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
         }
     }
 
-    [SuppressMessage(
-        "Design",
-        "CA1031",
-        Justification = "The receive loop treats every socket failure as a disconnect. It is a transport boundary.")]
     private async Task ReceiveLoopAsync()
     {
-        byte[] buffer = ArrayPool<byte>.Shared.Rent(_tcpOptions.ReceiveBufferBytes);
         try
         {
             while (_disconnected == 0)
             {
-                int read;
-                try
-                {
-                    read = await _socket.ReceiveAsync(buffer, SocketFlags.None, _lifetime.Token).ConfigureAwait(false);
-                }
-                catch (Exception)
+                if (!await WaitForDataAsync().ConfigureAwait(false))
                 {
                     break;
                 }
 
-                if (read == 0)
-                {
-                    break;
-                }
-
-                if (!_decoder.TryPush(buffer.AsSpan(0, read), _onFrame))
+                if (!await ReceiveOnceAsync().ConfigureAwait(false))
                 {
                     break;
                 }
@@ -237,8 +232,69 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
             FireDisconnected();
+        }
+    }
+
+    // Waits until the socket has data. The wait holds no receive buffer, so an
+    // idle connection holds none. A zero-length receive returns when the socket
+    // is readable and does not consume the data. Returns false on a socket
+    // failure or a close.
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "The receive loop treats every socket failure as a disconnect. It is a transport boundary.")]
+    private async Task<bool> WaitForDataAsync()
+    {
+        try
+        {
+            await _socket
+                .ReceiveAsync(Memory<byte>.Empty, SocketFlags.None, _lifetime.Token)
+                .ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    // Rents one receive buffer, reads once, and pushes the bytes. The buffer
+    // returns before this method returns on every path: a normal read, a
+    // decoder rejection, and a socket failure. Returns true when the loop must
+    // continue. Tests drive one iteration directly to pin the rent and the
+    // return.
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "The receive loop treats every socket failure as a disconnect. It is a transport boundary.")]
+    internal async Task<bool> ReceiveOnceAsync()
+    {
+        byte[] buffer = _receiveBufferPool.Rent(_tcpOptions.ReceiveBufferBytes);
+        try
+        {
+            int read;
+            try
+            {
+                read = await _socket
+                    .ReceiveAsync(buffer, SocketFlags.None, _lifetime.Token)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+
+            if (read == 0)
+            {
+                return false;
+            }
+
+            return _decoder.TryPush(buffer.AsSpan(0, read), _onFrame);
+        }
+        finally
+        {
+            _receiveBufferPool.Return(buffer, clearArray: true);
         }
     }
 

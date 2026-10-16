@@ -17,7 +17,7 @@ public sealed class TcpOptions
     /// <summary>The deadline for one handshake. Zero or negative disables it.</summary>
     public TimeSpan HandshakeTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
-    /// <summary>The receive buffer size per connection.</summary>
+    /// <summary>The receive buffer size per read. The receive loop rents it per read.</summary>
     public int ReceiveBufferBytes { get; set; } = 65536;
 
     /// <summary>The largest queued send bytes per connection. A full queue rejects sends.</summary>

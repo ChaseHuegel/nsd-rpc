@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
@@ -626,6 +627,172 @@ public sealed class TcpIntegrationTests
             Assert.True(connection.TrySend(new byte[256 * 1024]));
 
             await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task ReceiveOnceRentsAndReturnsTheBufferOnANormalRead()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var pool = new CountingPool();
+            var connection = new TcpConnection(client, new RpcOptions(), new TcpOptions(), pool);
+            List<byte[]> frames = [];
+            connection.FrameReceived += frame => frames.Add(frame.ToArray());
+
+            await server.SendAsync(Frame([1, 2, 3]), SocketFlags.None);
+            bool more = await connection.ReceiveOnceAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.True(more);
+            Assert.Single(frames);
+            Assert.Equal(1, pool.Rents);
+            Assert.Equal(1, pool.Returns);
+            Assert.Equal(0, pool.Outstanding);
+        }
+    }
+
+    [Fact]
+    public async Task ReceiveOnceRentsTheBufferForEachRead()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var pool = new CountingPool();
+            var connection = new TcpConnection(client, new RpcOptions(), new TcpOptions(), pool);
+
+            await server.SendAsync(Frame([1]), SocketFlags.None);
+            Assert.True(await connection.ReceiveOnceAsync().WaitAsync(TimeSpan.FromSeconds(10)));
+
+            await server.SendAsync(Frame([2]), SocketFlags.None);
+            Assert.True(await connection.ReceiveOnceAsync().WaitAsync(TimeSpan.FromSeconds(10)));
+
+            Assert.Equal(2, pool.Rents);
+            Assert.Equal(2, pool.Returns);
+            Assert.Equal(0, pool.Outstanding);
+        }
+    }
+
+    [Fact]
+    public async Task ReceiveOnceReturnsTheBufferOnADecoderRejection()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var pool = new CountingPool();
+            var connection = new TcpConnection(client, new RpcOptions(), new TcpOptions(), pool);
+
+            // A zero-length frame fails the decoder.
+            await server.SendAsync(new byte[4], SocketFlags.None);
+            bool more = await connection.ReceiveOnceAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.False(more);
+            Assert.Equal(1, pool.Rents);
+            Assert.Equal(1, pool.Returns);
+            Assert.Equal(0, pool.Outstanding);
+        }
+    }
+
+    [Fact]
+    public async Task ReceiveOnceReturnsTheBufferOnASocketFailure()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var pool = new CountingPool();
+            var connection = new TcpConnection(client, new RpcOptions(), new TcpOptions(), pool);
+            // Disposing the socket forces the next receive to throw.
+            connection.Close();
+
+            bool more = await connection.ReceiveOnceAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.False(more);
+            Assert.Equal(1, pool.Rents);
+            Assert.Equal(1, pool.Returns);
+            Assert.Equal(0, pool.Outstanding);
+        }
+    }
+
+    [Fact]
+    public async Task IdleConnectionHoldsNoReceiveBuffer()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var pool = new CountingPool();
+            var connection = new TcpConnection(client, new RpcOptions(), new TcpOptions(), pool);
+            connection.StartReceiving();
+
+            await server.SendAsync(Frame([1, 2, 3]), SocketFlags.None);
+            await pool.FirstReturn.WaitAsync(TimeSpan.FromSeconds(10));
+
+            // The read returned its buffer. The loop now waits for data
+            // without a buffer, so the idle connection holds none.
+            Assert.Equal(0, pool.Outstanding);
+        }
+    }
+
+    // A pooled array source that counts the rent and the return. It proves the
+    // receive loop rents per read and returns the buffer on every path.
+    private sealed class CountingPool : ArrayPool<byte>
+    {
+        private readonly ArrayPool<byte> _inner = ArrayPool<byte>.Shared;
+        private readonly TaskCompletionSource _firstReturn =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _rents;
+        private int _returns;
+
+        public int Rents => Volatile.Read(ref _rents);
+
+        public int Returns => Volatile.Read(ref _returns);
+
+        public int Outstanding => Rents - Returns;
+
+        public Task FirstReturn => _firstReturn.Task;
+
+        public override byte[] Rent(int minimumLength)
+        {
+            Interlocked.Increment(ref _rents);
+            return _inner.Rent(minimumLength);
+        }
+
+        public override void Return(byte[] array, bool clearArray = false)
+        {
+            Interlocked.Increment(ref _returns);
+            _inner.Return(array, clearArray);
+            _firstReturn.TrySetResult();
+        }
+    }
+
+    private static byte[] Frame(params byte[] payload)
+    {
+        byte[] frame = new byte[4 + payload.Length];
+        BinaryPrimitives.WriteInt32LittleEndian(frame, payload.Length);
+        payload.CopyTo(frame, 4);
+        return frame;
+    }
+
+    private static async Task<(Socket Client, Socket Server)> ConnectPairAsync()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            Task<Socket> accept = listener.AcceptSocketAsync();
+            var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            await client.ConnectAsync(IPAddress.Loopback, port);
+            Socket server = await accept;
+            return (client, server);
         }
         finally
         {

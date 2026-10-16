@@ -81,9 +81,11 @@ The transport tests pin the TCP layer:
 
 - [TcpFrameDecoderTests.cs](../NsdRpc.Tests/TcpFrameDecoderTests.cs:6) pins
   the framing contract, buffer growth, the cap, and fuzzing.
-- [TcpIntegrationTests.cs](../NsdRpc.Tests/TcpIntegrationTests.cs:10) pins the
-  handshake and round trips over loopback sockets, the bad-handshake skip, the
-  handshake framing errors, the send-queue bound, and the disconnect paths.
+- [TcpIntegrationTests.cs](../NsdRpc.Tests/TcpIntegrationTests.cs:10) pins
+  the handshake and round trips over loopback sockets, the bad-handshake skip, the
+  handshake framing errors, the send-queue bound, the disconnect paths, the
+  per-read receive buffer rent and return, and the idle connection holding no
+  receive buffer.
 
 ## Allocation coverage
 

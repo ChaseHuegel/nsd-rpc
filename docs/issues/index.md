@@ -12,7 +12,7 @@ add or work an issue.
 
 ### Improvement
 
-- [ ] [Rent the TCP receive buffer per read](/docs/issues/0052-tcp-receive-buffer-per-read.md) — hold no receive buffer while a connection is idle.
+- [x] [Rent the TCP receive buffer per read](/docs/issues/0052-tcp-receive-buffer-per-read.md) — hold no receive buffer while a connection is idle.
 - [ ] [Shrink the TCP frame decoder after idle](/docs/issues/0053-tcp-decoder-idle-shrink.md) — bound the decoder high-water mark.
 
 ### Research

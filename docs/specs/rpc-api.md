@@ -94,7 +94,7 @@ The TCP transport options live in
 | `Port` | `0` | The port. Zero binds an ephemeral port on the server. |
 | `NoDelay` | `true` | Disables Nagle's algorithm. |
 | `HandshakeTimeout` | 10 seconds | The deadline for one handshake. Zero or negative disables it. |
-| `ReceiveBufferBytes` | 65,536 | The receive buffer size for one connection. |
+| `ReceiveBufferBytes` | 65,536 | The receive buffer size per read. The receive loop rents it per read. |
 | `SendQueueBytes` | 1,048,576 | The largest queued send bytes for one connection. A full queue rejects the send. |
 
 The server transport completes each handshake in the background. A silent
