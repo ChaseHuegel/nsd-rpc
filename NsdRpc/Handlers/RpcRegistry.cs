@@ -10,7 +10,7 @@ public sealed class RpcRegistry
 {
     private readonly object _lock = new();
     private readonly Dictionary<ulong, HandlerEntry> _entries = new();
-    private Dictionary<ulong, HandlerEntry>? _snapshot;
+    private volatile Dictionary<ulong, HandlerEntry>? _snapshot;
     private bool _frozen;
 
     public void Add<TRequest, TResponse>(IRpcHandler<TRequest, TResponse> handler)
@@ -48,6 +48,7 @@ public sealed class RpcRegistry
             var entry = new HandlerEntry<TRequest, TResponse>(
                 handler, PayloadSerializerCache<TRequest>.Value, attribute.Direction);
             _entries.Add(attribute.Method, entry);
+            _snapshot = null;
         }
     }
 
@@ -80,6 +81,7 @@ public sealed class RpcRegistry
             var entry = new HandlerEntry<TRequest, TResponse>(
                 handler, PayloadSerializerCache<TRequest>.Value, direction);
             _entries.Add(methodId, entry);
+            _snapshot = null;
         }
     }
 
@@ -140,16 +142,22 @@ public sealed class RpcRegistry
         lock (_lock)
         {
             _frozen = true;
-            _snapshot = new Dictionary<ulong, HandlerEntry>(_entries);
+            _snapshot ??= new Dictionary<ulong, HandlerEntry>(_entries);
         }
     }
 
     internal bool TryGet(ulong method, out HandlerEntry entry)
     {
+        // The snapshot is immutable after publication. The read takes no lock.
+        Dictionary<ulong, HandlerEntry> snapshot = _snapshot ?? PublishSnapshot();
+        return snapshot.TryGetValue(method, out entry!);
+    }
+
+    private Dictionary<ulong, HandlerEntry> PublishSnapshot()
+    {
         lock (_lock)
         {
-            _snapshot ??= new Dictionary<ulong, HandlerEntry>(_entries);
-            return _snapshot.TryGetValue(method, out entry!);
+            return _snapshot ??= new Dictionary<ulong, HandlerEntry>(_entries);
         }
     }
 

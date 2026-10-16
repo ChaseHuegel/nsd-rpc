@@ -24,7 +24,7 @@ add or work an issue.
 
 - [x] [IRpcHost and the server broadcast call surface](/docs/issues/0020-rpc-host-broadcast.md) — one endpoint interface over `RpcClient`, `RpcPeer`, and `RpcServer`.
 - [x] [Cache the TCP frame delegate on the connection](/docs/issues/0022-cache-tcp-frame-delegate.md) — the receive loop allocates a delegate per socket read.
-- [ ] [Read the frozen handler registry without a lock](/docs/issues/0023-lock-free-frozen-registry.md) — every dispatch takes the registry lock.
+- [x] [Read the frozen handler registry without a lock](/docs/issues/0023-lock-free-frozen-registry.md) — every dispatch takes the registry lock.
 - [ ] [Remove the extra copy on the TCP send path](/docs/issues/0024-tcp-send-copy-elimination.md) — `TrySend` copies each frame into a fresh array.
 - [ ] [Avoid the linked cancellation source per dispatch](/docs/issues/0025-dispatch-cancellation-token-source.md) — each inbound request allocates a linked token graph.
 - [ ] [Reuse locks and payload sizes in call setup](/docs/issues/0026-call-setup-lock-and-size-reuse.md) — call setup takes the pending lock three times.
