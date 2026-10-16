@@ -251,6 +251,32 @@ public sealed class RpcStreamingTests
         return received;
     }
 
+    [Fact]
+    public async Task ParkingTheConsumerDoesNotAllocateASignal()
+    {
+        var queue = new AsyncChunkQueue<Handshake>(4);
+        await using IAsyncEnumerator<Handshake> enumerator = queue.EnumerateAll().GetAsyncEnumerator();
+
+        // Warm up: park and wake once.
+        ValueTask<bool> first = enumerator.MoveNextAsync();
+        Assert.True(queue.TryEnqueue(new Handshake(1)));
+        Assert.True(await first);
+        Assert.Equal(1, enumerator.Current.ProtocolVersion);
+
+        // Park again and measure the park.
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        ValueTask<bool> second = enumerator.MoveNextAsync();
+        long allocatedAfter = GC.GetAllocatedBytesForCurrentThread();
+
+        Assert.False(second.IsCompleted);
+        Assert.True(
+            allocatedAfter - allocatedBefore == 0,
+            "allocated " + (allocatedAfter - allocatedBefore));
+
+        queue.Complete();
+        Assert.False(await second);
+    }
+
     private sealed class RecordingSink : IChunkSink<Handshake>
     {
         public List<Handshake> Chunks { get; } = [];

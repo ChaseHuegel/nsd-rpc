@@ -33,7 +33,7 @@ add or work an issue.
 - [x] [Skip timeout scans with a per-peer deadline watermark](/docs/issues/0043-timeout-scan-watermark.md) — a poll rescans every pending call of every peer.
 - [x] [Cache the call-cancelled delegate in RpcPeer](/docs/issues/0044-cached-cancel-delegate.md) — the instance method group allocates per call.
 - [x] [Build no drop string while the trace switch is off](/docs/issues/0045-trace-switch-guard.md) — drops allocate a string although the default switch blocks the event.
-- [ ] [Reuse the stream consumer signal instead of a TCS per park](/docs/issues/0046-stream-wait-signal-reuse.md) — a drained queue allocates one signal per wait.
+- [x] [Reuse the stream consumer signal instead of a TCS per park](/docs/issues/0046-stream-wait-signal-reuse.md) — a drained queue allocates one signal per wait.
 
 ### Research
 

@@ -1,7 +1,7 @@
 # Improvement: Reuse the stream consumer signal instead of a TCS per park
 
 - Type: improvement
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -22,7 +22,17 @@ State the tolerated allocations.
 
 ## Acceptance criteria
 
-- [ ] The wait path reuses one wait source. A warm chunk wait allocates no signal object.
-- [ ] A test measures the allocations of a warmed chunk wait and asserts the recorded bound.
-- [ ] The overflow, completion, and cancellation tests pass unchanged.
-- [ ] The docs pass updates [rpc-api](../specs/rpc-api.md) if the stream contract changes.
+- [x] The wait path reuses one wait source. A warm chunk wait allocates no signal object.
+- [x] A test measures the allocations of a warmed chunk wait and asserts the recorded bound.
+- [x] The overflow, completion, and cancellation tests pass unchanged.
+- [x] The docs pass updates [rpc-api](../specs/rpc-api.md) if the stream contract changes.
+
+## Resolution
+
+`AsyncChunkQueue<T>` implements `IValueTaskSource` over one
+`ManualResetValueTaskSourceCore<bool>`. A park awaits a `ValueTask` over the
+queue, so it allocates no signal. `ParkingTheConsumerDoesNotAllocateASignal`
+asserts zero allocation.
+
+The stream contract does not change, so [rpc-api](../specs/rpc-api.md)
+needs no update.

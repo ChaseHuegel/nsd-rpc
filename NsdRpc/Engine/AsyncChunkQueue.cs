@@ -1,13 +1,18 @@
+using System.Threading.Tasks.Sources;
+
 namespace NsdRpc;
 
 // A bounded chunk queue for one stream session. One consumer drains it. The
 // session completes it when the response arrives.
-internal sealed class AsyncChunkQueue<T>
+//
+// The queue owns one reusable wait source, so a park allocates no signal.
+internal sealed class AsyncChunkQueue<T> : IValueTaskSource
 {
     private readonly object _lock = new();
     private readonly Queue<T> _queue;
     private readonly int _capacity;
-    private TaskCompletionSource<bool>? _signal;
+    private ManualResetValueTaskSourceCore<bool> _signal;
+    private bool _waiting;
     private bool _completed;
 
     public AsyncChunkQueue(int capacity)
@@ -26,8 +31,7 @@ internal sealed class AsyncChunkQueue<T>
             }
 
             _queue.Enqueue(item);
-            _signal?.TrySetResult(true);
-            _signal = null;
+            SignalLocked();
             return true;
         }
     }
@@ -37,8 +41,7 @@ internal sealed class AsyncChunkQueue<T>
         lock (_lock)
         {
             _completed = true;
-            _signal?.TrySetResult(true);
-            _signal = null;
+            SignalLocked();
         }
     }
 
@@ -48,7 +51,8 @@ internal sealed class AsyncChunkQueue<T>
         {
             T? item = default;
             bool hasItem = false;
-            TaskCompletionSource<bool>? signal = null;
+            bool finished = false;
+            ValueTask wait = default;
             lock (_lock)
             {
                 if (_queue.Count > 0)
@@ -58,12 +62,12 @@ internal sealed class AsyncChunkQueue<T>
                 }
                 else if (_completed)
                 {
-                    yield break;
+                    finished = true;
                 }
                 else
                 {
-                    signal = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                    _signal = signal;
+                    _waiting = true;
+                    wait = new ValueTask(this, _signal.Version);
                 }
             }
 
@@ -73,7 +77,38 @@ internal sealed class AsyncChunkQueue<T>
                 continue;
             }
 
-            await signal!.Task.ConfigureAwait(false);
+            if (finished)
+            {
+                yield break;
+            }
+
+            await wait.ConfigureAwait(false);
+            _signal.Reset();
         }
+    }
+
+    private void SignalLocked()
+    {
+        if (_waiting)
+        {
+            _waiting = false;
+            _signal.SetResult(true);
+        }
+    }
+
+    ValueTaskSourceStatus IValueTaskSource.GetStatus(short token)
+    {
+        return _signal.GetStatus(token);
+    }
+
+    void IValueTaskSource.OnCompleted(
+        Action<object?> continuation, object? state, short token, ValueTaskSourceOnCompletedFlags flags)
+    {
+        _signal.OnCompleted(continuation, state, token, flags);
+    }
+
+    void IValueTaskSource.GetResult(short token)
+    {
+        _signal.GetResult(token);
     }
 }
