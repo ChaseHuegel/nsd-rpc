@@ -15,7 +15,7 @@
     <PackageId>NsdRpc.Tcp</PackageId>
     <Version>0.1.0</Version>
     <Authors>Chase Huegel</Authors>
-    <Description>A TCP transport for the NsdRpc framework: framing, sockets, and the handshake.</Description>
+    <Description>A TCP transport for the nsd-rpc framework.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/ChaseHuegel/nsd-rpc</PackageProjectUrl>
     <RepositoryUrl>https://github.com/ChaseHuegel/nsd-rpc.git</RepositoryUrl>

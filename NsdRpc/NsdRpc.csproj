@@ -17,7 +17,7 @@
     <PackageId>NsdRpc</PackageId>
     <Version>0.1.0</Version>
     <Authors>Chase Huegel</Authors>
-    <Description>A zero-dependency nsd (Needlefish Schema Definition) based C# RPC framework and library.</Description>
+    <Description>A zero-dependency nsd based C# RPC framework and library.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/ChaseHuegel/nsd-rpc</PackageProjectUrl>
     <RepositoryUrl>https://github.com/ChaseHuegel/nsd-rpc.git</RepositoryUrl>
