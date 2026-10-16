@@ -174,6 +174,28 @@ public sealed class RpcDispatcherTests
     }
 
     [Fact]
+    public async Task DispatchAllocatesOnlyTheCancellationSource()
+    {
+        var registry = new RpcRegistry();
+        registry.Add(new EchoHandler());
+        var peer = new RpcPeer(new InMemoryConnection());
+        var dispatcher = new RpcDispatcher(registry, peer);
+        var context = new RpcContext(peer, 1UL, 5UL);
+        byte[] payload = new Handshake(1).Serialize();
+
+        await dispatcher.DispatchAsync(context, payload);
+        await dispatcher.DispatchAsync(context, payload);
+
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        await dispatcher.DispatchAsync(context, payload);
+        long allocatedAfter = GC.GetAllocatedBytesForCurrentThread();
+
+        Assert.True(
+            allocatedAfter - allocatedBefore <= 384,
+            "allocated " + (allocatedAfter - allocatedBefore));
+    }
+
+    [Fact]
     public async Task HandlerTokenFiresOnCancellation()
     {
         var registry = new RpcRegistry();

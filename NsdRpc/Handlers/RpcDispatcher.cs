@@ -31,8 +31,12 @@ internal sealed class RpcDispatcher
         CancellationTokenSource? cancelSource = null;
         if (context.RequestId != 0UL)
         {
-            cancelSource = CancellationTokenSource.CreateLinkedTokenSource(_peer.ConnectionToken);
-            _peer.AttachCancellation(context.RequestId, cancelSource);
+            cancelSource = new CancellationTokenSource();
+            if (!_peer.AttachCancellation(context.RequestId, cancelSource))
+            {
+                // The peer faulted or the call already completed.
+                cancelSource.Cancel();
+            }
         }
 
         try

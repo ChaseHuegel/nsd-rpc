@@ -1,7 +1,7 @@
 # Improvement: Avoid the linked cancellation source per dispatch
 
 - Type: improvement
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -25,9 +25,20 @@ clears the inbound set. See
 
 ## Acceptance criteria
 
-- [ ] One plain `CancellationTokenSource` covers one inbound request. No linked source and no registration on the connection token exist.
-- [ ] A cancellation frame cancels the token of a running handler.
-- [ ] A disconnect cancels the tokens of all running handlers.
-- [ ] A test measures the dispatch allocations for one request and asserts the recorded bound.
-- [ ] Every cancellation test passes unchanged.
-- [ ] The docs pass updates [rpc-api](../specs/rpc-api.md) if the token lifetime description changes.
+- [x] One plain `CancellationTokenSource` covers one inbound request. No linked source and no registration on the connection token exist.
+- [x] A cancellation frame cancels the token of a running handler.
+- [x] A disconnect cancels the tokens of all running handlers.
+- [x] A test measures the dispatch allocations for one request and asserts the recorded bound.
+- [x] Every cancellation test passes unchanged.
+- [x] The docs pass updates [rpc-api](../specs/rpc-api.md) if the token lifetime description changes.
+
+## Resolution
+
+The dispatcher creates one plain `CancellationTokenSource` per inbound
+request. No linked source and no registration on a connection token exist.
+`FaultPending` cancels every attached source before it clears the inbound set,
+so a disconnect still cancels running handlers.
+
+The allocation test records 320 bytes per dispatch and asserts a bound of
+384. The handlers and the cancellation behavior do not change, so
+[rpc-api](../specs/rpc-api.md) needs no update.

@@ -35,7 +35,6 @@ public sealed class RpcPeer : IRpcHost
     private Task? _workerTask;
     private bool _workerRunning;
 
-    private readonly CancellationTokenSource _connectionToken = new();
     private volatile bool _faulted;
     private RpcDispatchHook? _dispatchHook;
 
@@ -63,8 +62,6 @@ public sealed class RpcPeer : IRpcHost
     public ulong ClientId => _clientId;
 
     internal bool IsServer => _isServer;
-
-    internal CancellationToken ConnectionToken => _connectionToken.Token;
 
     // The queued dispatches. Tests use it to prove the bound.
     internal int DispatchQueueCount
@@ -405,7 +402,6 @@ public sealed class RpcPeer : IRpcHost
     public void FaultPending(int errorCode, string message)
     {
         _faulted = true;
-        _connectionToken.Cancel();
 
         PendingCallBase[] snapshot = ArrayPool<PendingCallBase>.Shared.Rent(_options.MaxPendingCalls);
         int count = 0;
@@ -420,10 +416,29 @@ public sealed class RpcPeer : IRpcHost
             _pending.Clear();
         }
 
+        List<CancellationTokenSource>? sources = null;
         lock (_inboundLock)
         {
             _dispatchQueue.Clear();
+            foreach (InboundCall inbound in _inbound.Values)
+            {
+                inbound.Cancelled = true;
+                if (inbound.CancelSource != null)
+                {
+                    sources ??= new List<CancellationTokenSource>();
+                    sources.Add(inbound.CancelSource);
+                }
+            }
+
             _inbound.Clear();
+        }
+
+        if (sources != null)
+        {
+            foreach (CancellationTokenSource source in sources)
+            {
+                source.Cancel();
+            }
         }
 
         for (int i = 0; i < count; i++)
@@ -532,14 +547,22 @@ public sealed class RpcPeer : IRpcHost
         SendChunkFrame(method, requestId, in chunk);
     }
 
-    internal void AttachCancellation(ulong requestId, CancellationTokenSource cancelSource)
+    internal bool AttachCancellation(ulong requestId, CancellationTokenSource cancelSource)
     {
         lock (_inboundLock)
         {
+            if (_faulted)
+            {
+                return false;
+            }
+
             if (_inbound.TryGetValue(requestId, out InboundCall? inbound))
             {
                 inbound.CancelSource = cancelSource;
+                return true;
             }
+
+            return false;
         }
     }
 
