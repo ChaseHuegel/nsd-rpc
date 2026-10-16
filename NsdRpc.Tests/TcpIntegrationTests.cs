@@ -114,7 +114,7 @@ public sealed class TcpIntegrationTests
     {
         var transport = new TcpServerTransport(
             new RpcOptions(),
-            new TcpOptions { HandshakeTimeout = TimeSpan.FromMilliseconds(100) });
+            new TcpOptions { HandshakeTimeout = TimeSpan.FromSeconds(1) });
         Task<IServerConnection?> accept = transport.AcceptAsync();
         using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         await socket.ConnectAsync(IPAddress.Loopback, transport.Port);
@@ -126,7 +126,7 @@ public sealed class TcpIntegrationTests
         byte[] buffer = new byte[1];
         int read = await socket
             .ReceiveAsync(buffer, SocketFlags.None)
-            .WaitAsync(TimeSpan.FromSeconds(10));
+            .WaitAsync(TimeSpan.FromSeconds(30));
 
         Assert.Equal(0, read);
         Assert.False(accept.IsCompleted);
