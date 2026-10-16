@@ -109,6 +109,34 @@ public sealed class EnvelopeTests
     }
 
     [Fact]
+    public void EnvelopeIgnoresAnAppendedFieldWhoseValueScansAsAKnownId()
+    {
+        var envelope = new Envelope(
+            1, (byte)RpcMessageKind.Request, 9UL, 3UL, [7], new RpcError(-32600, "bad"));
+        byte[] bytes = envelope.Serialize();
+
+        // Append field id 6 with a value whose first two bytes scan as field
+        // id 0. The reader has read every known field, so it stops.
+        byte[] withUnknown = new byte[bytes.Length + 6];
+        bytes.CopyTo(withUnknown, 0);
+        withUnknown[bytes.Length] = 6;
+        withUnknown[bytes.Length + 2] = 0;
+        withUnknown[bytes.Length + 3] = 0;
+        withUnknown[bytes.Length + 4] = 0;
+        withUnknown[bytes.Length + 5] = 0;
+
+        Envelope actual = Envelope.Deserialize(withUnknown);
+
+        Assert.Equal(envelope.Version, actual.Version);
+        Assert.Equal(envelope.Kind, actual.Kind);
+        Assert.Equal(9UL, actual.Id);
+        Assert.Equal(3UL, actual.Method);
+        Assert.Equal(new byte[] { 7 }, actual.Payload);
+        Assert.Equal(-32600, actual.Error!.Value.Code);
+        Assert.Equal("bad", actual.Error.Value.Message);
+    }
+
+    [Fact]
     public void EnvelopeIgnoresTrailingUnknownFields()
     {
         var envelope = new Envelope(1, (byte)RpcMessageKind.Request, 9UL, 3UL, [7], null);

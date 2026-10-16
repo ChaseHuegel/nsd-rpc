@@ -201,6 +201,9 @@ by deadline. The send is best-effort. There is no ack.
 - A receiver with another version drops the frame and closes the connection.
   A reply in an unknown format is impossible. A later change may negotiate
   the version.
-- Field ids follow the nsd rules. Unknown fields are skipped.
-- Add fields. Do not reuse ids. A future `RpcError` data field is the first
-  planned extension.
+- Field ids are written in ascending order. Add fields. Do not reuse ids. The
+  reader stops after it reads every field it knows, so an appended field with
+  a new id is ignored. The nsd format has no field-length prefix, so a reader
+  cannot skip an unknown field that sits before a known field. Do not reorder
+  fields.
+- A future `RpcError` data field is the first planned extension.

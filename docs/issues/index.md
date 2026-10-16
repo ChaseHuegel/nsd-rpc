@@ -13,7 +13,7 @@ add or work an issue.
 - [x] [The TCP accept loop stalls on a silent client](/docs/issues/0033-tcp-handshake-accept-stall.md) — handshakes run serially and have no deadline.
 - [x] [MaxFrameBytes semantics disagree and the default blocks valid frames](/docs/issues/0034-max-frame-bytes-semantics.md) — the peer and the decoder use different bounds.
 - [x] [Envelope version mismatch does not close the connection](/docs/issues/0035-envelope-version-mismatch-close.md) — the peer faults calls and leaves the socket open.
-- [ ] [The generated reader does not skip unknown fields](/docs/issues/0036-generated-unknown-field-skip.md) — trailing bytes scan as field ids.
+- [x] [The generated reader does not skip unknown fields](/docs/issues/0036-generated-unknown-field-skip.md) — trailing bytes scan as field ids.
 - [ ] [A chunk for a non-stream call resets its deadline](/docs/issues/0037-non-stream-chunk-deadline-reset.md) — a dropped chunk extends the timeout.
 - [ ] [A malformed chunk completes the call and keeps the pending entry](/docs/issues/0038-malformed-chunk-pending-entry.md) — the slot leaks until a response or a timeout.
 - [ ] [default(RpcResult<T>).ErrorMessage is null](/docs/issues/0039-default-result-error-message.md) — the annotation says non-null.
@@ -44,6 +44,7 @@ add or work an issue.
 ### Bug
 
 - [ ] [The server transport drops a frame that arrives before the peer subscribes](/docs/issues/0047-tcp-early-frame-drop.md) — the receive loop starts before the frame handler subscribes.
+- [ ] [The generated reader cannot reject an unknown field id among known ids](/docs/issues/0048-generated-unknown-id-rejection.md) — the nsd format cannot skip an unknown field.
 
 ### Improvement
 
