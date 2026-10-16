@@ -9,8 +9,8 @@ public sealed class RpcOptions
     /// <summary>The default call timeout. Zero disables the deadline.</summary>
     public TimeSpan Timeout { get; set; } = TimeSpan.FromMilliseconds(30000);
 
-    /// <summary>The largest frame a peer accepts or sends.</summary>
-    public int MaxFrameBytes { get; set; } = 65536;
+    /// <summary>The largest frame a peer accepts or sends, including the 4-byte length prefix.</summary>
+    public int MaxFrameBytes { get; set; } = 65570;
 
     /// <summary>The most pending calls and inbound requests one peer tracks.</summary>
     public int MaxPendingCalls { get; set; } = 1024;

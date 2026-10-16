@@ -205,7 +205,7 @@ internal sealed class TcpConnection : IRpcConnection
         byte[] header = new byte[4];
         await ReadExactAsync(header, 4, cancellationToken).ConfigureAwait(false);
         int length = BinaryPrimitives.ReadInt32LittleEndian(header);
-        if (length <= 0 || length > _decoder.MaxFrameBytes)
+        if (length <= 0 || length > _decoder.MaxFrameBytes - 4)
         {
             throw new InvalidDataException("Bad handshake frame length.");
         }

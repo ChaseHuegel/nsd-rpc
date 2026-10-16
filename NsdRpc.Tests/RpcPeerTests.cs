@@ -480,6 +480,23 @@ public sealed class RpcPeerTests
     }
 
     [Fact]
+    public async Task PeerAcceptsAFrameAtTheCapAndDropsOneAboveIt()
+    {
+        // A null-payload notification envelope is 26 bytes, so the frame is 30.
+        var options = new RpcOptions { MaxFrameBytes = 30 };
+        var peer = new RpcPeer(new InMemoryConnection(), options);
+        var atCap = new Envelope(1, (byte)RpcMessageKind.Notification, 0UL, ProbeMethod, null, null);
+
+        int atCapCalls = await CountDispatchesAfterMalformedInput(
+            peer, state => RpcTestHelpers.Deliver(state, in atCap));
+        int aboveCapCalls = await CountDispatchesAfterMalformedInput(
+            peer, state => state.HandleFrame(new byte[31]));
+
+        Assert.Equal(2, atCapCalls);
+        Assert.Equal(1, aboveCapCalls);
+    }
+
+    [Fact]
     public async Task PeerDropsFrameShorterThanTheLengthPrefix()
     {
         var peer = new RpcPeer(new InMemoryConnection());

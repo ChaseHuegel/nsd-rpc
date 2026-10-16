@@ -10,7 +10,7 @@ public sealed class RpcOptionsTests
         var options = new RpcOptions();
 
         Assert.Equal(TimeSpan.FromMilliseconds(30000), options.Timeout);
-        Assert.Equal(65536, options.MaxFrameBytes);
+        Assert.Equal(65570, options.MaxFrameBytes);
         Assert.Equal(1024, options.MaxPendingCalls);
         Assert.Equal(1024, options.MaxBufferedChunks);
         Assert.NotNull(options.TimestampNanos);

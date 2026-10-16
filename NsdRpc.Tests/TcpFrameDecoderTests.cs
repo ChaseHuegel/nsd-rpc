@@ -92,7 +92,7 @@ public sealed class TcpFrameDecoderTests
     [Fact]
     public void DecoderRejectsOversizeFrame()
     {
-        var decoder = new TcpFrameDecoder(8);
+        var decoder = new TcpFrameDecoder(12);
 
         bool ok = decoder.TryPush(Frame([1, 2, 3, 4, 5, 6, 7, 8, 9]), span => { });
 
@@ -102,11 +102,23 @@ public sealed class TcpFrameDecoderTests
     [Fact]
     public void DecoderAcceptsFrameAtTheCap()
     {
-        var decoder = new TcpFrameDecoder(8);
+        var decoder = new TcpFrameDecoder(12);
+        List<byte[]> frames = [];
+
+        bool ok = decoder.TryPush(Frame([1, 2, 3, 4, 5, 6, 7, 8]), span => frames.Add(span.ToArray()));
+
+        Assert.True(ok);
+        AssertFrames(frames, [1, 2, 3, 4, 5, 6, 7, 8]);
+    }
+
+    [Fact]
+    public void DecoderRejectsFrameOneByteAboveTheCap()
+    {
+        var decoder = new TcpFrameDecoder(11);
 
         bool ok = decoder.TryPush(Frame([1, 2, 3, 4, 5, 6, 7, 8]), span => { });
 
-        Assert.True(ok);
+        Assert.False(ok);
     }
 
     [Fact]
@@ -130,7 +142,7 @@ public sealed class TcpFrameDecoderTests
     [Fact]
     public void DecoderAcceptsAMaximumFrameSplitBeforeTheNextFrame()
     {
-        var decoder = new TcpFrameDecoder(4096);
+        var decoder = new TcpFrameDecoder(4100);
         List<byte[]> frames = [];
         byte[] payload = new byte[4096];
         byte[] firstFrame = Frame(payload);
@@ -151,7 +163,7 @@ public sealed class TcpFrameDecoderTests
     [Fact]
     public void DecoderAcceptsAReadAboveTheCapThatHoldsAFrameAndTheNextStart()
     {
-        var decoder = new TcpFrameDecoder(4096);
+        var decoder = new TcpFrameDecoder(4100);
         List<byte[]> frames = [];
         byte[] payload = new byte[4096];
         byte[] firstFrame = Frame(payload);
@@ -163,7 +175,7 @@ public sealed class TcpFrameDecoderTests
         bool first = decoder.TryPush(stream.AsSpan(0, read), span => frames.Add(span.ToArray()));
         bool second = decoder.TryPush(stream.AsSpan(read), span => frames.Add(span.ToArray()));
 
-        Assert.True(read > decoder.MaxFrameBytes + 4);
+        Assert.True(read > decoder.MaxFrameBytes);
         Assert.True(first);
         Assert.True(second);
         AssertFrames(frames, payload, [1, 2, 3]);
@@ -172,7 +184,7 @@ public sealed class TcpFrameDecoderTests
     [Fact]
     public void DecoderFuzzesSplitPointsNearTheCap()
     {
-        var decoder = new TcpFrameDecoder(4096);
+        var decoder = new TcpFrameDecoder(4100);
         List<byte[]> frames = [];
         byte[] payload = new byte[4096];
         for (int index = 0; index < payload.Length; index++)

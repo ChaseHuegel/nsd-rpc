@@ -4,8 +4,9 @@ using NsdRpc;
 namespace NsdRpc.Tcp;
 
 // Turns a byte stream into frames. A frame is a 4-byte little-endian length
-// prefix and the payload bytes. The decoder rejects a zero length and a
-// length above MaxFrameBytes. An incomplete frame stays buffered.
+// prefix and the payload bytes, so MaxFrameBytes bounds the frame including
+// the prefix. The decoder rejects a zero length and a frame above
+// MaxFrameBytes. An incomplete frame stays buffered.
 //
 // The buffer holds at most one frame. A read that spans a frame boundary is
 // copied and processed in slices, so a large read never needs a large buffer.
@@ -68,7 +69,7 @@ internal sealed class TcpFrameDecoder
         while (_count - start >= 4)
         {
             int length = BinaryPrimitives.ReadInt32LittleEndian(_buffer.AsSpan(start, 4));
-            if (length <= 0 || length > _maxFrameBytes)
+            if (length <= 0 || length > _maxFrameBytes - 4)
             {
                 return false;
             }
@@ -89,18 +90,17 @@ internal sealed class TcpFrameDecoder
         }
 
         Invariant.That(
-            _count <= _maxFrameBytes + 4,
+            _count <= _maxFrameBytes,
             "The frame decoder retains more than one frame.");
         return true;
     }
 
     private bool TryGrowBuffer()
     {
-        int maximum = _maxFrameBytes + 4;
         int newSize = _buffer.Length * 2;
-        if (newSize > maximum)
+        if (newSize > _maxFrameBytes)
         {
-            newSize = maximum;
+            newSize = _maxFrameBytes;
         }
 
         if (newSize <= _buffer.Length)

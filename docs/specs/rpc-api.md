@@ -67,7 +67,7 @@ Rules:
 public sealed class RpcOptions
 {
     public TimeSpan Timeout { get; set; } = TimeSpan.FromMilliseconds(30000); // 0 disables
-    public int MaxFrameBytes { get; set; } = 65536;
+    public int MaxFrameBytes { get; set; } = 65570; // the largest valid frame
     public int MaxPendingCalls { get; set; } = 1024;
     public int MaxBufferedChunks { get; set; } = 1024;
     public Func<long> TimestampNanos { get; set; } = ...; // monotonic

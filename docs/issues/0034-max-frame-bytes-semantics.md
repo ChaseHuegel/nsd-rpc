@@ -1,7 +1,7 @@
 # Bug: MaxFrameBytes semantics disagree and the default blocks valid frames
 
 - Type: bug
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -28,7 +28,14 @@ at the decoder and closes the connection.
 
 ## Acceptance criteria
 
-- [ ] One definition states what `MaxFrameBytes` counts.
-- [ ] The default admits every frame the format allows.
-- [ ] Tests pin the bound at the cap and one byte over, on send and receive.
-- [ ] The protocol doc and the `RpcOptions` doc match the implementation.
+- [x] One definition states what `MaxFrameBytes` counts.
+- [x] The default admits every frame the format allows.
+- [x] Tests pin the bound at the cap and one byte over, on send and receive.
+- [x] The protocol doc and the `RpcOptions` doc match the implementation.
+
+## Resolution
+
+`MaxFrameBytes` is the largest frame, including the 4-byte length prefix. The
+default is 65,570 bytes, the largest frame the format allows. The decoder, the
+peer receive path, and the send path compare the same frame size. The decoder
+buffer is bounded by the frame cap.

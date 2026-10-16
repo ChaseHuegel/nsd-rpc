@@ -75,8 +75,8 @@ Wire facts:
 
 - The minimum envelope is 26 bytes. It has a null payload and a null error.
 - nsd arrays hold at most 65,535 values. A payload holds at most 65,535
-  bytes. The largest envelope is 65,566 bytes. It has a full payload and a
-  null error.
+  bytes. The largest envelope is 65,566 bytes. The largest frame is 65,570
+  bytes. It has a full payload and a null error.
 - Senders normalize an empty payload to null. A receiver treats a null
   payload and an empty payload as no data.
 - Optional fields with no value are not encoded. A null payload costs zero
@@ -124,8 +124,9 @@ An unknown kind value is dropped and logged.
   the envelope.
 - A payload type needs no transport registration.
 - A null payload means no data.
-- `MaxFrameBytes` bounds the frame. The default is 65,536. The default sits
-  above the format maximum. It never blocks a valid frame.
+- `MaxFrameBytes` bounds one frame, including the 4-byte length prefix. The
+  default is 65,570, the size of the largest valid frame. A frame one byte
+  above the default fails.
 - The 65,535-byte payload cap is a format limit. It is not configurable.
 
 ## Error codes

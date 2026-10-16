@@ -3,6 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using NsdRpc;
 using NsdRpc.Tcp;
+using NsdRpc.Tests.Wire;
 using NsdRpc.Wire;
 
 namespace NsdRpc.Tests;
@@ -17,6 +18,15 @@ public sealed class TcpIntegrationTests
         {
             return new ValueTask<RpcResult<Handshake>>(
                 RpcResult<Handshake>.Success(new Handshake(request.ProtocolVersion + 1)));
+        }
+    }
+
+    private sealed class BlobEchoHandler : IRpcHandler<Blob, Blob>
+    {
+        public ValueTask<RpcResult<Blob>> ExecuteAsync(
+            Blob request, RpcContext context, CancellationToken cancellationToken)
+        {
+            return new ValueTask<RpcResult<Blob>>(RpcResult<Blob>.Success(request));
         }
     }
 
@@ -335,6 +345,54 @@ public sealed class TcpIntegrationTests
 
         Assert.True(result.IsSuccess, "code=" + result.ErrorCode + " message=" + result.ErrorMessage);
         Assert.Equal(42, result.Value.ProtocolVersion);
+        server.Close();
+    }
+
+    [Fact]
+    public async Task MaximumPayloadRoundTripsAtTheDefaultCap()
+    {
+        var registry = new RpcRegistry();
+        registry.Add<Blob, Blob>(new BlobEchoHandler(), 400);
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        var server = new RpcServer(transport, registry);
+        server.Start();
+        var connection = new TcpClientConnection(
+            new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
+        var client = new RpcClient(connection, new RpcRegistry());
+        await connection.ConnectAsync();
+
+        // The blob codec adds five bytes, so a 65,530-byte array makes a
+        // 65,535-byte payload. The frame is 65,570 bytes, the default cap.
+        var request = new Blob(new byte[65530]);
+        RpcResult<Blob> result = await client
+            .InvokeAsync<Blob, Blob>(400, in request)
+            .WaitAsync(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(65535, request.GetSize());
+        Assert.True(result.IsSuccess, "code=" + result.ErrorCode + " message=" + result.ErrorMessage);
+        Assert.Equal(65530, result.Value.Data!.Length);
+        server.Close();
+    }
+
+    [Fact]
+    public async Task PayloadAboveTheCapIsRejected()
+    {
+        var registry = new RpcRegistry();
+        registry.Add<Blob, Blob>(new BlobEchoHandler(), 400);
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        var server = new RpcServer(transport, registry);
+        server.Start();
+        var connection = new TcpClientConnection(
+            new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
+        var client = new RpcClient(connection, new RpcRegistry());
+        await connection.ConnectAsync();
+
+        // One more byte makes the frame 65,571 bytes, one above the default cap.
+        var request = new Blob(new byte[65531]);
+        RpcResult<Blob> result = await client.InvokeAsync<Blob, Blob>(400, in request);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal((int)RpcErrorCode.InvalidRequest, result.ErrorCode);
         server.Close();
     }
 

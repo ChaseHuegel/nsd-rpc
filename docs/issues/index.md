@@ -11,7 +11,7 @@ add or work an issue.
 - [x] [TcpServerTransport leaks accepted connections](/docs/issues/0031-tcp-accepted-connection-leak.md) — a disconnected client stays in the accepted list.
 - [x] [Frame decoder rejects valid data near the frame cap](/docs/issues/0032-frame-decoder-false-rejection.md) — a read that spans a frame boundary kills the connection.
 - [x] [The TCP accept loop stalls on a silent client](/docs/issues/0033-tcp-handshake-accept-stall.md) — handshakes run serially and have no deadline.
-- [ ] [MaxFrameBytes semantics disagree and the default blocks valid frames](/docs/issues/0034-max-frame-bytes-semantics.md) — the peer and the decoder use different bounds.
+- [x] [MaxFrameBytes semantics disagree and the default blocks valid frames](/docs/issues/0034-max-frame-bytes-semantics.md) — the peer and the decoder use different bounds.
 - [ ] [Envelope version mismatch does not close the connection](/docs/issues/0035-envelope-version-mismatch-close.md) — the peer faults calls and leaves the socket open.
 - [ ] [The generated reader does not skip unknown fields](/docs/issues/0036-generated-unknown-field-skip.md) — trailing bytes scan as field ids.
 - [ ] [A chunk for a non-stream call resets its deadline](/docs/issues/0037-non-stream-chunk-deadline-reset.md) — a dropped chunk extends the timeout.
