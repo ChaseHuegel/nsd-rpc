@@ -1,7 +1,7 @@
 # Bug: A notification flood grows the dispatch queue without a bound
 
 - Type: bug
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -26,8 +26,14 @@ The rule "Put a limit on everything" lives in
 
 ## Acceptance criteria
 
-- [ ] A bound applies to the dispatch queue. The bound is a config key in `RpcOptions` or the existing `MaxPendingCalls`.
-- [ ] A full queue drops the notification and logs the drop. A request at capacity still answers `Busy` as today.
-- [ ] A test blocks the worker, floods notifications, and proves the queue never exceeds the bound.
-- [ ] A test proves the peer still dispatches requests and notifications after the queue drains.
-- [ ] The docs pass records the bound and its default in [rpc-api](../specs/rpc-api.md).
+- [x] A bound applies to the dispatch queue. The bound is a config key in `RpcOptions` or the existing `MaxPendingCalls`.
+- [x] A full queue drops the notification and logs the drop. A request at capacity still answers `Busy` as today.
+- [x] A test blocks the worker, floods notifications, and proves the queue never exceeds the bound.
+- [x] A test proves the peer still dispatches requests and notifications after the queue drains.
+- [x] The docs pass records the bound and its default in [rpc-api](../specs/rpc-api.md).
+
+## Resolution
+
+`MaxPendingCalls` bounds the dispatch queue. `HandleStandaloneNotification`
+drops the notification and logs the drop when the queue is full. The
+[rpc-api](../specs/rpc-api.md) rule records the bound.

@@ -61,6 +61,18 @@ public sealed class RpcPeer : IRpcCaller
 
     internal CancellationToken ConnectionToken => _connectionToken.Token;
 
+    // The queued dispatches. Tests use it to prove the bound.
+    internal int DispatchQueueCount
+    {
+        get
+        {
+            lock (_inboundLock)
+            {
+                return _dispatchQueue.Count;
+            }
+        }
+    }
+
     internal RpcDispatchHook? DispatchHook
     {
         get => _dispatchHook;
@@ -969,9 +981,20 @@ public sealed class RpcPeer : IRpcCaller
             return;
         }
 
+        bool queued = false;
         lock (_inboundLock)
         {
-            _dispatchQueue.Enqueue(new DispatchEntry(null, envelope.Method, envelope.Payload));
+            if (_dispatchQueue.Count < _options.MaxPendingCalls)
+            {
+                _dispatchQueue.Enqueue(new DispatchEntry(null, envelope.Method, envelope.Payload));
+                queued = true;
+            }
+        }
+
+        if (!queued)
+        {
+            RpcLog.Drop("dispatch queue full");
+            return;
         }
 
         EnsureWorkerRunning();

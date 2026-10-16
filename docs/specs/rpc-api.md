@@ -137,9 +137,10 @@ Engine rules:
 
 - Ids start at 1. The counter uses checked arithmetic. Overflow faults the
   connection. Ids are never reused.
-- `MaxPendingCalls` bounds the pending table and the inbound set. A full
-  table fails a new call with `Busy` before it sends. A full inbound set
-  answers a new request with `Busy`.
+- `MaxPendingCalls` bounds the pending table, the inbound set, and the
+  dispatch queue. A full table fails a new call with `Busy` before it sends.
+  A full inbound set answers a new request with `Busy`. A full dispatch queue
+  drops a notification and logs the drop.
 - One pump per peer processes frames in arrival order. Handler calls run in
   order.
 - Network input is never asserted. Unknown ids, duplicate responses, and

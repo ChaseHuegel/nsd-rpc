@@ -480,6 +480,43 @@ public sealed class RpcPeerTests
     }
 
     [Fact]
+    public async Task NotificationFloodKeepsTheDispatchQueueBounded()
+    {
+        var options = new RpcOptions { MaxPendingCalls = 2 };
+        var peer = new RpcPeer(new InMemoryConnection(), options);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.DispatchHook = async (context, payload) =>
+        {
+            started.TrySetResult();
+            await release.Task.ConfigureAwait(false);
+        };
+
+        var notification = new Envelope(1, (byte)RpcMessageKind.Notification, 0UL, EchoMethod, null, null);
+        RpcTestHelpers.Deliver(peer, in notification);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // The worker is blocked in the hook. The queue must stay bounded.
+        for (int index = 0; index < 10; index++)
+        {
+            RpcTestHelpers.Deliver(peer, in notification);
+        }
+
+        Assert.True(peer.DispatchQueueCount <= options.MaxPendingCalls);
+
+        // After the drain the peer still dispatches.
+        var delivered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.DispatchHook = (context, payload) =>
+        {
+            delivered.TrySetResult();
+            return default;
+        };
+        release.TrySetResult();
+        RpcTestHelpers.Deliver(peer, in notification);
+        await delivered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+    }
+
+    [Fact]
     public async Task MalformedChunkFreesThePendingSlot()
     {
         long now = 0;
