@@ -27,7 +27,7 @@ add or work an issue.
 - [x] [Read the frozen handler registry without a lock](/docs/issues/0023-lock-free-frozen-registry.md) — every dispatch takes the registry lock.
 - [x] [Remove the extra copy on the TCP send path](/docs/issues/0024-tcp-send-copy-elimination.md) — `TrySend` copies each frame into a fresh array.
 - [x] [Avoid the linked cancellation source per dispatch](/docs/issues/0025-dispatch-cancellation-token-source.md) — each inbound request allocates a linked token graph.
-- [ ] [Reuse locks and payload sizes in call setup](/docs/issues/0026-call-setup-lock-and-size-reuse.md) — call setup takes the pending lock three times.
+- [x] [Reuse locks and payload sizes in call setup](/docs/issues/0026-call-setup-lock-and-size-reuse.md) — call setup takes the pending lock three times.
 - [ ] [Allocate the peer timeout scratch lazily](/docs/issues/0028-lazy-peer-timeout-scratch.md) — each idle peer holds 8 kilobytes it never uses.
 - [ ] [Prove hot-path allocations with real payloads](/docs/issues/0029-hot-path-allocation-tests.md) — the current tests hide the codec allocation.
 - [ ] [Skip timeout scans with a per-peer deadline watermark](/docs/issues/0043-timeout-scan-watermark.md) — a poll rescans every pending call of every peer.

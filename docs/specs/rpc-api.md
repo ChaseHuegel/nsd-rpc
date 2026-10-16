@@ -327,6 +327,7 @@ public interface IPayloadSerializer<T>
 {
     int GetSize(in T value);
     void Serialize(in T value, ref byte[] buffer);
+    void Serialize(in T value, ref byte[] buffer, int size); // size comes from GetSize
     bool TryDeserialize(ReadOnlySpan<byte> data, out T value);
 }
 ```

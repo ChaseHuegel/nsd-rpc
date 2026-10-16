@@ -64,7 +64,11 @@ internal sealed class NsdPayloadSerializer<T> : IPayloadSerializer<T>
 
     public void Serialize(in T value, ref byte[] buffer)
     {
-        int size = GetSize(in value);
+        Serialize(in value, ref buffer, GetSize(in value));
+    }
+
+    public void Serialize(in T value, ref byte[] buffer, int size)
+    {
         Invariant.That(buffer.Length >= size, "The buffer is smaller than the payload.");
         _serializeInto(in value, buffer.AsSpan(0, size), 0);
     }

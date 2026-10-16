@@ -10,11 +10,13 @@ internal abstract class PendingCallBase
         TimeoutNanos = timeoutNanos;
     }
 
-    public readonly ulong Id;
+    public ulong Id;
 
     public long DeadlineNanos;
 
     public readonly long TimeoutNanos;
+
+    public bool Cancelled;
 
     public CancellationTokenRegistration Registration;
 

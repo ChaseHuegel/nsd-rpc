@@ -1,7 +1,7 @@
 # Improvement: Reuse locks and payload sizes in call setup
 
 - Type: improvement
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -25,9 +25,22 @@ The second call is pure CPU work.
 
 ## Acceptance criteria
 
-- [ ] Call setup takes at most one `_pendingLock` acquisition to allocate the id and add the pending call.
-- [ ] The send happens outside the lock. A call that is removed before the send does not send.
-- [ ] Ids stay monotonic and are never reused. A failed add still consumes the id. The overflow fault rule does not change.
-- [ ] `GetSize` runs once per payload on the send path.
-- [ ] A test covers the cancel-before-send race.
-- [ ] Existing peer and streaming tests pass unchanged.
+- [x] Call setup takes at most one `_pendingLock` acquisition to allocate the id and add the pending call.
+- [x] The send happens outside the lock. A call that is removed before the send does not send.
+- [x] Ids stay monotonic and are never reused. A failed add still consumes the id. The overflow fault rule does not change.
+- [x] `GetSize` runs once per payload on the send path.
+- [x] A test covers the cancel-before-send race.
+- [x] Existing peer and streaming tests pass unchanged.
+
+## Resolution
+
+`TryAddPendingCall` allocates the id and adds the pending call under one
+`_pendingLock` acquisition. The caller constructs the pending call with id 0
+and the method assigns the id. Serialization runs outside the lock.
+
+`OnCallCancelled` sets the pending `Cancelled` flag. The send path checks the
+flag instead of taking the lock again, so a call cancelled before the send
+does not send its request.
+
+`IPayloadSerializer<T>` gained a `Serialize` overload that takes the size
+from `GetSize`. The peer computes the size once and passes it.

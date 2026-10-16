@@ -97,7 +97,9 @@ public sealed class RpcPeer : IRpcHost
         long timeoutNanos = ComputeTimeoutNanos(timeout);
         long deadlineNanos = ComputeDeadline(timeoutNanos);
 
-        if (!TryAllocateId(out ulong id, out int rejectCode, out string rejectMessage))
+        var pending = new PendingCall<TResponse>(
+            0UL, deadlineNanos, timeoutNanos, PayloadSerializerCache<TResponse>.Value);
+        if (!TryAddPendingCall(pending, out int rejectCode, out string rejectMessage))
         {
             if (rejectCode == (int)RpcErrorCode.InternalError)
             {
@@ -110,15 +112,8 @@ public sealed class RpcPeer : IRpcHost
         byte[]? payload = SerializePayload(in request, PayloadSerializerCache<TRequest>.Value);
         if (payload != null && FrameSizeFor(payload.Length) > _options.MaxFrameBytes)
         {
+            RemovePending(pending.Id);
             return FailedTask<TResponse>((int)RpcErrorCode.InvalidRequest, "the request frame exceeds MaxFrameBytes");
-        }
-
-        var pending = new PendingCall<TResponse>(
-            id, deadlineNanos, timeoutNanos, PayloadSerializerCache<TResponse>.Value);
-        if (!TryAddPending(pending))
-        {
-            pending.Fail((int)RpcErrorCode.Unavailable, "peer faulted");
-            return pending.Completion.Task;
         }
 
         if (cancellationToken.CanBeCanceled)
@@ -126,7 +121,7 @@ public sealed class RpcPeer : IRpcHost
             pending.Registration = cancellationToken.Register(OnCallCancelled, pending);
         }
 
-        if (IsPending(pending.Id))
+        if (!pending.Cancelled)
         {
             SendRequestFrame(pending.Id, method, payload, pending);
         }
@@ -157,7 +152,14 @@ public sealed class RpcPeer : IRpcHost
         long timeoutNanos = ComputeTimeoutNanos(timeout);
         long deadlineNanos = ComputeDeadline(timeoutNanos);
 
-        if (!TryAllocateId(out ulong id, out int rejectCode, out string rejectMessage))
+        var pending = new PendingStreamCall<TChunk, TResponse>(
+            0UL,
+            deadlineNanos,
+            timeoutNanos,
+            PayloadSerializerCache<TResponse>.Value,
+            PayloadSerializerCache<TChunk>.Value,
+            sink);
+        if (!TryAddPendingCall(pending, out int rejectCode, out string rejectMessage))
         {
             if (rejectCode == (int)RpcErrorCode.InternalError)
             {
@@ -170,20 +172,8 @@ public sealed class RpcPeer : IRpcHost
         byte[]? payload = SerializePayload(in request, PayloadSerializerCache<TRequest>.Value);
         if (payload != null && FrameSizeFor(payload.Length) > _options.MaxFrameBytes)
         {
+            RemovePending(pending.Id);
             return FailedTask<TResponse>((int)RpcErrorCode.InvalidRequest, "the request frame exceeds MaxFrameBytes");
-        }
-
-        var pending = new PendingStreamCall<TChunk, TResponse>(
-            id,
-            deadlineNanos,
-            timeoutNanos,
-            PayloadSerializerCache<TResponse>.Value,
-            PayloadSerializerCache<TChunk>.Value,
-            sink);
-        if (!TryAddPending(pending))
-        {
-            pending.Fail((int)RpcErrorCode.Unavailable, "peer faulted");
-            return pending.Completion.Task;
         }
 
         if (cancellationToken.CanBeCanceled)
@@ -191,7 +181,7 @@ public sealed class RpcPeer : IRpcHost
             pending.Registration = cancellationToken.Register(OnCallCancelled, pending);
         }
 
-        if (IsPending(pending.Id))
+        if (!pending.Cancelled)
         {
             SendRequestFrame(pending.Id, method, payload, pending);
         }
@@ -216,27 +206,10 @@ public sealed class RpcPeer : IRpcHost
         long timeoutNanos = ComputeTimeoutNanos(timeout);
         long deadlineNanos = ComputeDeadline(timeoutNanos);
 
-        if (!TryAllocateId(out ulong id, out int rejectCode, out string rejectMessage))
-        {
-            if (rejectCode == (int)RpcErrorCode.InternalError)
-            {
-                FaultPending(rejectCode, rejectMessage);
-            }
-
-            return EmptySession<TChunk, TResponse>(rejectCode, rejectMessage);
-        }
-
-        byte[]? payload = SerializePayload(in request, PayloadSerializerCache<TRequest>.Value);
-        if (payload != null && FrameSizeFor(payload.Length) > _options.MaxFrameBytes)
-        {
-            return EmptySession<TChunk, TResponse>(
-                (int)RpcErrorCode.InvalidRequest, "the request frame exceeds MaxFrameBytes");
-        }
-
         var queue = new AsyncChunkQueue<TChunk>(_options.MaxBufferedChunks);
         var sink = new SessionChunkSink<TChunk>(queue);
         var pending = new PendingStreamCall<TChunk, TResponse>(
-            id,
+            0UL,
             deadlineNanos,
             timeoutNanos,
             PayloadSerializerCache<TResponse>.Value,
@@ -245,10 +218,23 @@ public sealed class RpcPeer : IRpcHost
         sink.OnOverflow = () => FaultCall(pending.Id, (int)RpcErrorCode.Busy, "stream buffer full");
         var session = new RpcStreamSession<TChunk, TResponse>(pending.Completion.Task, queue);
 
-        if (!TryAddPending(pending))
+        if (!TryAddPendingCall(pending, out int rejectCode, out string rejectMessage))
         {
-            pending.Fail((int)RpcErrorCode.Unavailable, "peer faulted");
+            if (rejectCode == (int)RpcErrorCode.InternalError)
+            {
+                FaultPending(rejectCode, rejectMessage);
+            }
+
+            pending.Fail(rejectCode, rejectMessage);
             return session;
+        }
+
+        byte[]? payload = SerializePayload(in request, PayloadSerializerCache<TRequest>.Value);
+        if (payload != null && FrameSizeFor(payload.Length) > _options.MaxFrameBytes)
+        {
+            RemovePending(pending.Id);
+            return EmptySession<TChunk, TResponse>(
+                (int)RpcErrorCode.InvalidRequest, "the request frame exceeds MaxFrameBytes");
         }
 
         if (cancellationToken.CanBeCanceled)
@@ -256,7 +242,7 @@ public sealed class RpcPeer : IRpcHost
             pending.Registration = cancellationToken.Register(OnCallCancelled, pending);
         }
 
-        if (IsPending(pending.Id))
+        if (!pending.Cancelled)
         {
             SendRequestFrame(pending.Id, method, payload, pending);
         }
@@ -618,13 +604,13 @@ public sealed class RpcPeer : IRpcHost
         }
     }
 
-    private bool TryAllocateId(out ulong id, out int rejectCode, out string rejectMessage)
+    private bool TryAddPendingCall(
+        PendingCallBase pending, out int rejectCode, out string rejectMessage)
     {
         lock (_pendingLock)
         {
             if (_faulted)
             {
-                id = 0UL;
                 rejectCode = (int)RpcErrorCode.Unavailable;
                 rejectMessage = "peer faulted";
                 return false;
@@ -632,7 +618,6 @@ public sealed class RpcPeer : IRpcHost
 
             if (_idOverflowed)
             {
-                id = 0UL;
                 rejectCode = (int)RpcErrorCode.InternalError;
                 rejectMessage = "request id space exhausted";
                 return false;
@@ -640,12 +625,12 @@ public sealed class RpcPeer : IRpcHost
 
             if (_pending.Count >= _options.MaxPendingCalls)
             {
-                id = 0UL;
                 rejectCode = (int)RpcErrorCode.Busy;
                 rejectMessage = "too many pending calls";
                 return false;
             }
 
+            ulong id;
             try
             {
                 id = checked(_nextId++);
@@ -653,37 +638,16 @@ public sealed class RpcPeer : IRpcHost
             catch (OverflowException)
             {
                 _idOverflowed = true;
-                id = 0UL;
                 rejectCode = (int)RpcErrorCode.InternalError;
                 rejectMessage = "request id space exhausted";
                 return false;
             }
 
+            pending.Id = id;
+            _pending.Add(id, pending);
             rejectCode = 0;
             rejectMessage = string.Empty;
             return true;
-        }
-    }
-
-    private bool TryAddPending(PendingCallBase pending)
-    {
-        lock (_pendingLock)
-        {
-            if (_faulted)
-            {
-                return false;
-            }
-
-            _pending.Add(pending.Id, pending);
-            return true;
-        }
-    }
-
-    private bool IsPending(ulong id)
-    {
-        lock (_pendingLock)
-        {
-            return _pending.ContainsKey(id);
         }
     }
 
@@ -692,6 +656,7 @@ public sealed class RpcPeer : IRpcHost
         var pending = (PendingCallBase)state!;
         lock (_pendingLock)
         {
+            pending.Cancelled = true;
             if (!_pending.Remove(pending.Id))
             {
                 return;
@@ -766,7 +731,7 @@ public sealed class RpcPeer : IRpcHost
         }
 
         byte[] buffer = new byte[size];
-        serializer.Serialize(in value, ref buffer);
+        serializer.Serialize(in value, ref buffer, size);
         return buffer;
     }
 

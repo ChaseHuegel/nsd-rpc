@@ -570,6 +570,26 @@ public sealed class RpcPeerTests
     }
 
     [Fact]
+    public async Task CancelledTokenBeforeSendDoesNotSendTheRequest()
+    {
+        var connection = new InMemoryConnection();
+        var peer = new RpcPeer(connection);
+        using var source = new CancellationTokenSource();
+        source.Cancel();
+
+        Task<RpcResult<Handshake>> call = peer.InvokeAsync<Handshake, Handshake>(
+            EchoMethod, new Handshake(1), cancellationToken: source.Token);
+
+        RpcResult<Handshake> result = await call;
+        Assert.Equal((int)RpcErrorCode.Cancelled, result.ErrorCode);
+
+        // Only the cancellation frame is sent.
+        List<Envelope> frames = DecodeFrames(connection.SentFrames);
+        Assert.Single(frames);
+        Assert.Equal((byte)RpcMessageKind.Cancellation, frames[0].Kind);
+    }
+
+    [Fact]
     public async Task VersionMismatchClosesTheConnection()
     {
         var connection = new InMemoryConnection();
