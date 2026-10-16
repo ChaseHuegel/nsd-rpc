@@ -23,8 +23,17 @@ bound.
 
 ## Acceptance criteria
 
-- [ ] A disconnect removes the connection from `_accepted`. `RpcServer` already uses this pattern for peers ([RpcServer.cs:127](../../NsdRpc/RpcServer.cs:127)).
-- [ ] A test connects a client, disconnects it, and proves the list shrinks. Use the internal access from `InternalsVisibleTo`.
-- [ ] A test runs many connect and disconnect cycles and proves the list stays bounded.
-- [ ] `Close` stays safe when a disconnect races the close.
-- [ ] The memory of one connection is released after the disconnect.
+- [x] A disconnect removes the connection from `_accepted`. `RpcServer` already uses this pattern for peers ([RpcServer.cs:127](../../NsdRpc/RpcServer.cs:127)).
+- [x] A test connects a client, disconnects it, and proves the list shrinks. Use the internal access from `InternalsVisibleTo`.
+- [x] A test runs many connect and disconnect cycles and proves the list stays bounded.
+- [x] `Close` stays safe when a disconnect races the close.
+- [x] The memory of one connection is released after the disconnect.
+
+## Resolution
+
+The transport subscribes to each accepted connection's disconnect and removes
+the entry. The list held the only strong reference to the connection, so the
+removal releases it. The list stays bounded by the live connection count.
+
+`Close` snapshots the list before it closes the connections, so a disconnect
+handler cannot mutate the list during the loop.

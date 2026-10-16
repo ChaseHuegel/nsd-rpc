@@ -29,8 +29,15 @@ buffer.
 
 ## Acceptance criteria
 
-- [ ] A test pushes one maximum-size frame in two parts. The second part holds the start of the next frame. Both frames arrive and `TryPush` returns true.
-- [ ] A test pushes one span above the frame cap that holds one complete frame and the start of the next frame. The decoder accepts both frames.
-- [ ] An oversize frame still returns false. A zero-length frame still returns false.
-- [ ] The buffer growth has a stated upper bound. The decoder asserts the bound.
-- [ ] The fuzz test covers split points near the cap and stays green.
+- [x] A test pushes one maximum-size frame in two parts. The second part holds the start of the next frame. Both frames arrive and `TryPush` returns true.
+- [x] A test pushes one span above the frame cap that holds one complete frame and the start of the next frame. The decoder accepts both frames.
+- [x] An oversize frame still returns false. A zero-length frame still returns false.
+- [x] The buffer growth has a stated upper bound. The decoder asserts the bound.
+- [x] The fuzz test covers split points near the cap and stays green.
+
+## Resolution
+
+`TryPush` copies the read in slices that fit the buffer and emits complete
+frames after each slice. The retained bytes never exceed one frame.
+`TryGrowBuffer` stops at the frame bound, and the decoder asserts the bound
+with the shared `Invariant` helper.
