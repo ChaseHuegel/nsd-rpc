@@ -5,6 +5,8 @@ Fetch only the doc you need. Never fetch the whole tree.
 
 | Subject | Doc |
 |---|---|
+| Use the packages: install and run a first client and server | [getting-started](getting-started.md) |
+| Public API surface at a glance | [quick-reference](quick-reference.md) |
 | How to work in this repo: toolchain, build, commits | [development](development.md) |
 | Coding style: Tiger Style and the Power of 10 in C# | [specs/coding-style](specs/coding-style.md) |
 | Testing doctrine: edge cases, determinism, fuzzing | [testing](testing.md) |
