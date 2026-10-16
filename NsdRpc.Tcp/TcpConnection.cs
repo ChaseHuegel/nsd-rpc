@@ -11,14 +11,14 @@ namespace NsdRpc.Tcp;
 // loop pushes complete frames. A bounded send queue drains on demand. The
 // handshake runs before StartReceiving, so the RPC engine only ever sees
 // envelope frames.
-internal sealed class TcpConnection : IRpcConnection
+internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
 {
     private readonly Socket _socket;
     private readonly TcpFrameDecoder _decoder;
     private readonly TcpOptions _tcpOptions;
     private readonly RpcFrameHandler _onFrame;
     private readonly object _sendLock = new();
-    private readonly Queue<byte[]> _sendQueue = new();
+    private readonly Queue<SendBuffer> _sendQueue = new();
     private readonly CancellationTokenSource _lifetime = new();
     private Action? _disconnectedHandlers;
     private RpcFrameHandler? _frameReceivedHandlers;
@@ -52,12 +52,29 @@ internal sealed class TcpConnection : IRpcConnection
 
     public bool TrySend(ReadOnlySpan<byte> frame)
     {
-        if (_disconnected != 0)
+        // Check before the copy, so a rejected send allocates nothing.
+        if (_disconnected != 0 || _queuedBytes + frame.Length > _tcpOptions.SendQueueBytes)
         {
             return false;
         }
 
         byte[] copy = frame.ToArray();
+        return Enqueue(copy, copy.Length, pooled: false);
+    }
+
+    public bool TrySendOwned(byte[] frame, int length)
+    {
+        if (Enqueue(frame, length, pooled: true))
+        {
+            return true;
+        }
+
+        ArrayPool<byte>.Shared.Return(frame, clearArray: true);
+        return false;
+    }
+
+    private bool Enqueue(byte[] frame, int length, bool pooled)
+    {
         lock (_sendLock)
         {
             if (_disconnected != 0)
@@ -65,13 +82,13 @@ internal sealed class TcpConnection : IRpcConnection
                 return false;
             }
 
-            if (_queuedBytes + copy.Length > _tcpOptions.SendQueueBytes)
+            if (_queuedBytes + length > _tcpOptions.SendQueueBytes)
             {
                 return false;
             }
 
-            _sendQueue.Enqueue(copy);
-            _queuedBytes += copy.Length;
+            _sendQueue.Enqueue(new SendBuffer(frame, length, pooled));
+            _queuedBytes += length;
             if (_sending)
             {
                 return true;
@@ -127,7 +144,7 @@ internal sealed class TcpConnection : IRpcConnection
     {
         while (true)
         {
-            byte[]? buffer = null;
+            SendBuffer buffer;
             lock (_sendLock)
             {
                 if (_sendQueue.Count == 0)
@@ -146,9 +163,43 @@ internal sealed class TcpConnection : IRpcConnection
             }
             catch (Exception)
             {
+                ReturnBuffer(buffer);
+                ReturnQueuedBuffers();
                 FireDisconnected();
                 return;
             }
+
+            ReturnBuffer(buffer);
+        }
+    }
+
+    // Returns a buffer to the pool. The copy path owns a plain array, so it
+    // is dropped.
+    private static void ReturnBuffer(SendBuffer buffer)
+    {
+        if (buffer.Pooled)
+        {
+            ArrayPool<byte>.Shared.Return(buffer.Frame, clearArray: true);
+        }
+    }
+
+    private void ReturnQueuedBuffers()
+    {
+        while (true)
+        {
+            SendBuffer buffer;
+            lock (_sendLock)
+            {
+                if (_sendQueue.Count == 0)
+                {
+                    return;
+                }
+
+                buffer = _sendQueue.Dequeue();
+                _queuedBytes -= buffer.Length;
+            }
+
+            ReturnBuffer(buffer);
         }
     }
 
@@ -193,11 +244,18 @@ internal sealed class TcpConnection : IRpcConnection
 
     private async Task SendAllAsync(byte[] data, CancellationToken cancellationToken)
     {
+        await SendAllAsync(new SendBuffer(data, data.Length, pooled: false), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task SendAllAsync(SendBuffer buffer, CancellationToken cancellationToken)
+    {
         int offset = 0;
-        while (offset < data.Length)
+        while (offset < buffer.Length)
         {
             int sent = await _socket.SendAsync(
-                data.AsMemory(offset), SocketFlags.None, cancellationToken).ConfigureAwait(false);
+                buffer.Frame.AsMemory(offset, buffer.Length - offset), SocketFlags.None, cancellationToken)
+                .ConfigureAwait(false);
             if (sent <= 0)
             {
                 throw new IOException("The socket sent no bytes.");
@@ -205,6 +263,24 @@ internal sealed class TcpConnection : IRpcConnection
 
             offset += sent;
         }
+    }
+
+    // One queued frame. A pooled frame comes from the shared pool and returns
+    // to it after the send.
+    private readonly struct SendBuffer
+    {
+        public SendBuffer(byte[] frame, int length, bool pooled)
+        {
+            Frame = frame;
+            Length = length;
+            Pooled = pooled;
+        }
+
+        public readonly byte[] Frame;
+
+        public readonly int Length;
+
+        public readonly bool Pooled;
     }
 
     private async Task<byte[]> ReadOneFrameAsync(CancellationToken cancellationToken)

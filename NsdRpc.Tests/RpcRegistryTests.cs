@@ -31,6 +31,42 @@ public sealed class RpcRegistryTests
     }
 
     [Fact]
+    public void TryGetReadsAPublishedSnapshotWithoutAllocating()
+    {
+        var registry = new RpcRegistry();
+        registry.Add(new DerivedHandler(), 600UL);
+
+        // A lookup before Freeze publishes the snapshot.
+        Assert.True(registry.TryGet(600, out _));
+        registry.Freeze();
+        Assert.True(registry.TryGet(600, out _));
+        Assert.False(registry.TryGet(601, out _));
+
+        // Warm up, then measure.
+        _ = registry.TryGet(600, out _);
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int index = 0; index < 1000; index++)
+        {
+            _ = registry.TryGet(600, out _);
+        }
+
+        long after = GC.GetAllocatedBytesForCurrentThread();
+        Assert.Equal(before, after);
+    }
+
+    [Fact]
+    public void AddAfterALookupInvalidatesTheSnapshot()
+    {
+        var registry = new RpcRegistry();
+        registry.Add(new DerivedHandler(), 600UL);
+        Assert.True(registry.TryGet(600, out _));
+
+        registry.Add(new DerivedHandler(), 601UL);
+
+        Assert.True(registry.TryGet(601, out _));
+    }
+
+    [Fact]
     public void AddFailsFastOnMissingAttribute()
     {
         var registry = new RpcRegistry();

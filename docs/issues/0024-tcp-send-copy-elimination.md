@@ -1,7 +1,7 @@
 # Improvement: Remove the extra copy on the TCP send path
 
 - Type: improvement
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -40,8 +40,29 @@ for each rejected option.
 
 ## Acceptance criteria
 
-- [ ] A design note in this issue records the selected option and the reason for each rejected option.
-- [ ] A send performs at most one copy from the peer buffer to the socket buffer.
-- [ ] A rejected send (a full queue or a closed connection) allocates nothing.
-- [ ] A test measures the sending-thread allocations of a warmed `TrySend` call and asserts the recorded bound.
-- [ ] The send queue bound tests and the TCP integration tests pass unchanged.
+- [x] A design note in this issue records the selected option and the reason for each rejected option.
+- [x] A send performs at most one copy from the peer buffer to the socket buffer.
+- [x] A rejected send (a full queue or a closed connection) allocates nothing.
+- [x] A test measures the sending-thread allocations of a warmed `TrySend` call and asserts the recorded bound.
+- [x] The send queue bound tests and the TCP integration tests pass unchanged.
+
+## Resolution
+
+Selected option: **B**, ownership transfer.
+
+The peer rents the frame buffer, serializes into it, and hands it to the
+transport through the internal `IOwnedFrameSink` interface. `TcpConnection`
+queues the buffer, sends it, and returns it to the pool. The send queue holds
+a length, because a rented buffer is longer than the frame. A failed send
+returns the current buffer and every queued buffer to the pool.
+
+The public `TrySend` keeps copy semantics for custom transports. It checks
+the disconnect flag and the queue bound before the copy, so a rejected send
+allocates nothing.
+
+Rejected options:
+
+- **A**: the transport pools its own send buffers. It keeps one copy from the
+  peer buffer into the transport buffer.
+- **C**: the peer serializes the payload directly into the frame buffer. It
+  needs generator support. It is tracked by issue 0030.

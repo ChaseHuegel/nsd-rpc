@@ -533,6 +533,41 @@ public sealed class TcpIntegrationTests
     }
 
     [Fact]
+    public async Task RejectedSendDoesNotAllocate()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            Task<Socket> accept = listener.AcceptSocketAsync();
+            using var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            await client.ConnectAsync(IPAddress.Loopback, port);
+            using Socket server = await accept;
+
+            var connection = new TcpConnection(
+                client, new RpcOptions(), new TcpOptions { SendQueueBytes = 32 });
+            byte[] frame = new byte[64];
+
+            // Warm up the rejected path.
+            Assert.False(connection.TrySend(frame));
+
+            long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+            for (int index = 0; index < 1000; index++)
+            {
+                Assert.False(connection.TrySend(frame));
+            }
+
+            long allocatedAfter = GC.GetAllocatedBytesForCurrentThread();
+            Assert.Equal(allocatedBefore, allocatedAfter);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
     public async Task PartialSendDeliversTheWholeFrame()
     {
         var listener = new TcpListener(IPAddress.Loopback, 0);

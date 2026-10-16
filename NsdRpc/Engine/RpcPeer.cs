@@ -757,10 +757,17 @@ public sealed class RpcPeer : IRpcHost
         }
 
         byte[] frame = ArrayPool<byte>.Shared.Rent(4 + size);
+        BinaryPrimitives.WriteInt32LittleEndian(frame, size);
+        envelope.SerializeInto(frame.AsSpan(4, size));
+
+        if (_connection is IOwnedFrameSink sink)
+        {
+            // The transport owns the buffer and returns it to the pool.
+            return sink.TrySendOwned(frame, 4 + size);
+        }
+
         try
         {
-            BinaryPrimitives.WriteInt32LittleEndian(frame, size);
-            envelope.SerializeInto(frame.AsSpan(4, size));
             return _connection.TrySend(frame.AsSpan(0, 4 + size));
         }
         finally
