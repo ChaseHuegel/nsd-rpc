@@ -17,7 +17,7 @@ add or work an issue.
 - [x] [A chunk for a non-stream call resets its deadline](/docs/issues/0037-non-stream-chunk-deadline-reset.md) — a dropped chunk extends the timeout.
 - [x] [A malformed chunk completes the call and keeps the pending entry](/docs/issues/0038-malformed-chunk-pending-entry.md) — the slot leaks until a response or a timeout.
 - [x] [default(RpcResult<T>).ErrorMessage is null](/docs/issues/0039-default-result-error-message.md) — the annotation says non-null.
-- [ ] [The TCP send loop drops the remainder of a partial send](/docs/issues/0040-tcp-partial-send.md) — a stream send can complete partly and the frame is truncated.
+- [x] [The TCP send loop drops the remainder of a partial send](/docs/issues/0040-tcp-partial-send.md) — a stream send can complete partly and the frame is truncated.
 - [ ] [A notification flood grows the dispatch queue without a bound](/docs/issues/0041-notification-queue-bound.md) — notifications bypass the inbound cap and pin payload arrays.
 
 ### Improvement

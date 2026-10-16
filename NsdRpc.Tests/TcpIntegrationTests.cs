@@ -89,6 +89,8 @@ public sealed class TcpIntegrationTests
         var registry = new RpcRegistry();
         registry.Add(new EchoHandler());
         var server = new RpcServer(transport, registry);
+        var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.ClientConnected += _ => connected.TrySetResult();
         server.Start();
 
         // A silent client holds its handshake open.
@@ -99,6 +101,7 @@ public sealed class TcpIntegrationTests
             new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
         var client = new RpcClient(connection, new RpcRegistry());
         await connection.ConnectAsync();
+        await connected.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         RpcResult<Handshake> result = await client
             .InvokeAsync<Handshake, Handshake>(300, new Handshake(41))
@@ -335,11 +338,14 @@ public sealed class TcpIntegrationTests
         registry.Add(new EchoHandler());
         var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
         var server = new RpcServer(transport, registry);
+        var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.ClientConnected += _ => connected.TrySetResult();
         server.Start();
         var connection = new TcpClientConnection(
             new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
         var client = new RpcClient(connection, new RpcRegistry());
         await connection.ConnectAsync();
+        await connected.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         RpcResult<Handshake> result = await client.InvokeAsync<Handshake, Handshake>(300, new Handshake(41));
 
@@ -383,11 +389,14 @@ public sealed class TcpIntegrationTests
         registry.Add<Blob, Blob>(new BlobEchoHandler(), 400);
         var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
         var server = new RpcServer(transport, registry);
+        var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.ClientConnected += _ => connected.TrySetResult();
         server.Start();
         var connection = new TcpClientConnection(
             new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
         var client = new RpcClient(connection, new RpcRegistry());
         await connection.ConnectAsync();
+        await connected.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         // The blob codec adds five bytes, so a 65,530-byte array makes a
         // 65,535-byte payload. The frame is 65,570 bytes, the default cap.
@@ -409,11 +418,14 @@ public sealed class TcpIntegrationTests
         registry.Add<Blob, Blob>(new BlobEchoHandler(), 400);
         var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
         var server = new RpcServer(transport, registry);
+        var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.ClientConnected += _ => connected.TrySetResult();
         server.Start();
         var connection = new TcpClientConnection(
             new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
         var client = new RpcClient(connection, new RpcRegistry());
         await connection.ConnectAsync();
+        await connected.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
         // One more byte makes the frame 65,571 bytes, one above the default cap.
         var request = new Blob(new byte[65531]);
@@ -518,6 +530,72 @@ public sealed class TcpIntegrationTests
         await ReadFrameAsync(socket);
         await SendFrameAsync(socket, new Handshake(1).Serialize());
         return socket;
+    }
+
+    [Fact]
+    public async Task PartialSendDeliversTheWholeFrame()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            Task<Socket> accept = listener.AcceptSocketAsync();
+            using var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            // A small send buffer forces the first send call to be partial.
+            client.SendBufferSize = 4096;
+            await client.ConnectAsync(IPAddress.Loopback, port);
+            using Socket server = await accept;
+
+            var connection = new TcpConnection(
+                client, new RpcOptions(), new TcpOptions { SendQueueBytes = 1 << 20 });
+            byte[] frame = new byte[65536];
+            for (int index = 0; index < frame.Length; index++)
+            {
+                frame[index] = (byte)index;
+            }
+
+            Assert.True(connection.TrySend(frame));
+
+            byte[] received = new byte[frame.Length];
+            await ReadExactAsync(server, received).WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.Equal(frame, received);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task SendFailureDuringAPartlySentFrameFiresDisconnected()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            Task<Socket> accept = listener.AcceptSocketAsync();
+            using var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            client.SendBufferSize = 4096;
+            await client.ConnectAsync(IPAddress.Loopback, port);
+            Socket server = await accept;
+            // Close the peer before the send so the frame cannot fit a buffer.
+            server.Dispose();
+
+            var connection = new TcpConnection(
+                client, new RpcOptions(), new TcpOptions { SendQueueBytes = 1 << 20 });
+            var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            connection.Disconnected += () => disconnected.TrySetResult();
+            Assert.True(connection.TrySend(new byte[256 * 1024]));
+
+            await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+        finally
+        {
+            listener.Stop();
+        }
     }
 
     private static async Task<byte[]> ReadFrameAsync(Socket socket)

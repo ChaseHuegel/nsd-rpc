@@ -139,7 +139,7 @@ internal sealed class TcpConnection : IRpcConnection
 
             try
             {
-                await _socket.SendAsync(buffer, SocketFlags.None, _lifetime.Token).ConfigureAwait(false);
+                await SendAllAsync(buffer, _lifetime.Token).ConfigureAwait(false);
             }
             catch (Exception)
             {
@@ -196,6 +196,11 @@ internal sealed class TcpConnection : IRpcConnection
         {
             int sent = await _socket.SendAsync(
                 data.AsMemory(offset), SocketFlags.None, cancellationToken).ConfigureAwait(false);
+            if (sent <= 0)
+            {
+                throw new IOException("The socket sent no bytes.");
+            }
+
             offset += sent;
         }
     }

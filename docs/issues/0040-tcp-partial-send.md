@@ -1,7 +1,7 @@
 # Bug: The TCP send loop drops the remainder of a partial send
 
 - Type: bug
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -24,8 +24,15 @@ send buffer is nearly full.
 
 ## Acceptance criteria
 
-- [ ] The drain path sends every byte of one queued frame before it moves to the next frame. A partial count resumes at the correct offset.
-- [ ] A socket failure during a partly sent frame still stops the loop and fires the disconnected path.
-- [ ] A test drives a partly completed send and proves the remaining bytes are sent. The test does not sleep. Use the internal access from `InternalsVisibleTo`.
-- [ ] A test sends a frame larger than a small socket send buffer over a loopback pair and proves the receiver gets the whole frame. The issue records why the test is deterministic.
-- [ ] The TCP integration tests pass unchanged.
+- [x] The drain path sends every byte of one queued frame before it moves to the next frame. A partial count resumes at the correct offset.
+- [x] A socket failure during a partly sent frame still stops the loop and fires the disconnected path.
+- [x] A test drives a partly completed send and proves the remaining bytes are sent. The test does not sleep. Use the internal access from `InternalsVisibleTo`.
+- [x] A test sends a frame larger than a small socket send buffer over a loopback pair and proves the receiver gets the whole frame. The issue records why the test is deterministic.
+- [x] The TCP integration tests pass unchanged.
+
+## Resolution
+
+The drain path uses `SendAllAsync`, the same loop the handshake uses. It
+resumes at the returned offset and treats a zero send as a failure. The
+loopback test sets `SendBufferSize` to 4,096 and sends a 65,536-byte frame,
+so the first send cannot complete in one call.
