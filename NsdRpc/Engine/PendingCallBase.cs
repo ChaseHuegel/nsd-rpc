@@ -22,10 +22,11 @@ internal abstract class PendingCallBase
 
     public abstract void Fail(int errorCode, string errorMessage);
 
-    // True when the call consumed the chunk. False means the call has no stream.
-    public virtual bool ReceiveChunk(byte[]? payload)
+    // The call consumed the chunk. NotAStream and Failed mean the call did not
+    // take it. Failed also means the call is already complete.
+    public virtual ChunkResult ReceiveChunk(byte[]? payload)
     {
-        return false;
+        return ChunkResult.NotAStream;
     }
 
     public void DisposeRegistration()

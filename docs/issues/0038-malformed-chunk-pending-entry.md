@@ -1,7 +1,7 @@
 # Bug: A malformed chunk completes the call and keeps the pending entry
 
 - Type: bug
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -19,6 +19,12 @@ path must do the same.
 
 ## Acceptance criteria
 
-- [ ] A failed chunk decode removes the pending entry.
-- [ ] A test with a full pending table proves that the slot is free after the failure.
-- [ ] No cancellation frame follows a call that already completed.
+- [x] A failed chunk decode removes the pending entry.
+- [x] A test with a full pending table proves that the slot is free after the failure.
+- [x] No cancellation frame follows a call that already completed.
+
+## Resolution
+
+`ReceiveChunk` returns a `ChunkResult`. `Failed` means the call is already
+complete. The peer removes the pending entry and disposes the registration.
+No cancellation frame follows.

@@ -20,22 +20,20 @@ internal sealed class PendingStreamCall<TChunk, TResponse> : PendingCall<TRespon
         _sink = sink;
     }
 
-    public override bool ReceiveChunk(byte[]? payload)
+    public override ChunkResult ReceiveChunk(byte[]? payload)
     {
         if (payload == null)
         {
-            return true;
+            return ChunkResult.Consumed;
         }
 
         if (_chunkSerializer.TryDeserialize(payload, out TChunk chunk))
         {
             _sink.OnChunk(in chunk);
-        }
-        else
-        {
-            Fail((int)RpcErrorCode.InvalidRequest, "malformed chunk payload");
+            return ChunkResult.Consumed;
         }
 
-        return true;
+        Fail((int)RpcErrorCode.InvalidRequest, "malformed chunk payload");
+        return ChunkResult.Failed;
     }
 }

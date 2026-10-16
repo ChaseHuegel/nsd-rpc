@@ -14,8 +14,8 @@ add or work an issue.
 - [x] [MaxFrameBytes semantics disagree and the default blocks valid frames](/docs/issues/0034-max-frame-bytes-semantics.md) — the peer and the decoder use different bounds.
 - [x] [Envelope version mismatch does not close the connection](/docs/issues/0035-envelope-version-mismatch-close.md) — the peer faults calls and leaves the socket open.
 - [x] [The generated reader does not skip unknown fields](/docs/issues/0036-generated-unknown-field-skip.md) — trailing bytes scan as field ids.
-- [ ] [A chunk for a non-stream call resets its deadline](/docs/issues/0037-non-stream-chunk-deadline-reset.md) — a dropped chunk extends the timeout.
-- [ ] [A malformed chunk completes the call and keeps the pending entry](/docs/issues/0038-malformed-chunk-pending-entry.md) — the slot leaks until a response or a timeout.
+- [x] [A chunk for a non-stream call resets its deadline](/docs/issues/0037-non-stream-chunk-deadline-reset.md) — a dropped chunk extends the timeout.
+- [x] [A malformed chunk completes the call and keeps the pending entry](/docs/issues/0038-malformed-chunk-pending-entry.md) — the slot leaks until a response or a timeout.
 - [ ] [default(RpcResult<T>).ErrorMessage is null](/docs/issues/0039-default-result-error-message.md) — the annotation says non-null.
 - [ ] [The TCP send loop drops the remainder of a partial send](/docs/issues/0040-tcp-partial-send.md) — a stream send can complete partly and the frame is truncated.
 - [ ] [A notification flood grows the dispatch queue without a bound](/docs/issues/0041-notification-queue-bound.md) — notifications bypass the inbound cap and pin payload arrays.

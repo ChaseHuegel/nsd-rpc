@@ -480,6 +480,59 @@ public sealed class RpcPeerTests
     }
 
     [Fact]
+    public async Task MalformedChunkFreesThePendingSlot()
+    {
+        long now = 0;
+        var options = new RpcOptions { TimestampNanos = () => now, MaxPendingCalls = 1 };
+        var connection = new InMemoryConnection();
+        var peer = new RpcPeer(connection, options);
+        RpcStreamSession<Handshake, Handshake> session =
+            peer.InvokeStreamAsync<Handshake, Handshake, Handshake>(EchoMethod, new Handshake(1));
+
+        // Field id 0 with a truncated int value. The reader throws.
+        var chunk = new Envelope(
+            1, (byte)RpcMessageKind.Notification, 1UL, EchoMethod, [0, 0, 1], null);
+        RpcTestHelpers.Deliver(peer, in chunk);
+
+        RpcResult<Handshake> result = await session.Response;
+        Assert.False(result.IsSuccess);
+        Assert.Equal((int)RpcErrorCode.InvalidRequest, result.ErrorCode);
+
+        // The slot is free. A new call is not rejected as Busy.
+        Task<RpcResult<Handshake>> second =
+            peer.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(2));
+        Assert.False(second.IsCompleted);
+
+        // No cancellation frame follows the completed call.
+        int framesBeforePoll = connection.SentFrames.Count;
+        now = 10_000_000_000;
+        peer.Poll();
+        Assert.Equal(framesBeforePoll, connection.SentFrames.Count);
+    }
+
+    [Fact]
+    public async Task ChunkForANonStreamCallDoesNotExtendTheDeadline()
+    {
+        long now = 0;
+        var options = new RpcOptions { TimestampNanos = () => now };
+        var peer = new RpcPeer(new InMemoryConnection(), options);
+        Task<RpcResult<Handshake>> call = peer.InvokeAsync<Handshake, Handshake>(
+            EchoMethod, new Handshake(1), TimeSpan.FromSeconds(1));
+
+        // Deliver a chunk for the non-stream call halfway to the deadline.
+        now = 500_000_000;
+        var chunk = new Envelope(1, (byte)RpcMessageKind.Notification, 1UL, EchoMethod, null, null);
+        RpcTestHelpers.Deliver(peer, in chunk);
+
+        // Pass the original deadline. A dropped chunk must not move it.
+        now = 1_250_000_000;
+        peer.Poll();
+
+        RpcResult<Handshake> result = await call;
+        Assert.Equal((int)RpcErrorCode.RequestTimeout, result.ErrorCode);
+    }
+
+    [Fact]
     public async Task VersionMismatchClosesTheConnection()
     {
         var connection = new InMemoryConnection();

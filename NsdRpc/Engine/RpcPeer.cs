@@ -834,6 +834,23 @@ public sealed class RpcPeer : IRpcCaller
         pending.Fail(errorCode, errorMessage);
     }
 
+    private void RemovePending(ulong id)
+    {
+        PendingCallBase? removed = null;
+        lock (_pendingLock)
+        {
+            if (_pending.TryGetValue(id, out removed))
+            {
+                _pending.Remove(id);
+            }
+        }
+
+        if (removed != null)
+        {
+            removed.DisposeRegistration();
+        }
+    }
+
     private void HandleRequest(in Envelope envelope)
     {
         if (envelope.Id == 0UL)
@@ -984,13 +1001,30 @@ public sealed class RpcPeer : IRpcCaller
                 RpcLog.Drop("unknown chunk id");
                 return;
             }
-
-            pending.DeadlineNanos = ResetDeadline(pending.TimeoutNanos, now);
         }
 
-        if (!pending.ReceiveChunk(envelope.Payload))
+        ChunkResult chunkResult = pending.ReceiveChunk(envelope.Payload);
+        if (chunkResult == ChunkResult.NotAStream)
         {
             RpcLog.Drop("chunk for a non-stream call");
+            return;
+        }
+
+        if (chunkResult == ChunkResult.Failed)
+        {
+            // The call already completed. Free the pending slot so no
+            // cancellation frame follows.
+            RemovePending(envelope.Id);
+            return;
+        }
+
+        // Reset the deadline only after the call consumed the chunk.
+        lock (_pendingLock)
+        {
+            if (_pending.TryGetValue(envelope.Id, out pending))
+            {
+                pending.DeadlineNanos = ResetDeadline(pending.TimeoutNanos, now);
+            }
         }
     }
 

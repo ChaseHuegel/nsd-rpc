@@ -1,7 +1,7 @@
 # Bug: A chunk for a non-stream call resets its deadline
 
 - Type: bug
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -16,5 +16,10 @@ its configured timeout.
 
 ## Acceptance criteria
 
-- [ ] The deadline resets only when the call consumes the chunk.
-- [ ] A test with a fake clock proves that a dropped chunk does not extend the deadline.
+- [x] The deadline resets only when the call consumes the chunk.
+- [x] A test with a fake clock proves that a dropped chunk does not extend the deadline.
+
+## Resolution
+
+`HandleChunk` asks the call to consume the chunk first. It resets the
+deadline only after the call takes the chunk.
