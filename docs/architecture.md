@@ -12,6 +12,7 @@ container structure and where each piece goes. Update it as code lands.
 | NsdRpc.Generators | [NsdRpc.Generators/NsdRpc.Generators.csproj](../../NsdRpc.Generators/NsdRpc.Generators.csproj) | The source generator that emits typed service clients. Ships as the `NsdRpc.Generators` analyzer package. |
 | NsdRpc.Tests | [NsdRpc.Tests/NsdRpc.Tests.csproj](../../NsdRpc.Tests/NsdRpc.Tests.csproj) | xunit tests. References both libraries. Not packed. |
 | NsdRpc.Generators.Tests | [NsdRpc.Generators.Tests/NsdRpc.Generators.Tests.csproj](../../NsdRpc.Generators.Tests/NsdRpc.Generators.Tests.csproj) | xunit tests for the generator. Not packed. |
+| NsdRpc.Benchmarks | [NsdRpc.Benchmarks/NsdRpc.Benchmarks.csproj](../../NsdRpc.Benchmarks/NsdRpc.Benchmarks.csproj) | BenchmarkDotNet baselines for the engine and the TCP transport. Not packed. See [performance](performance.md). |
 | Chat.Common | [samples/Chat.Common](../../samples/Chat.Common/Chat.Common.csproj) | The shared chat wire contract and fake data. Not packed. |
 | Chat.Raw | [samples/Chat.Raw](../../samples/Chat.Raw/Chat.Raw.csproj) | The raw-API chat sample. Not packed. |
 | Chat.Generated | [samples/Chat.Generated](../../samples/Chat.Generated/Chat.Generated.csproj) | The source-generator chat sample. Not packed. |

@@ -1,0 +1,7 @@
+#version 1.0;
+#namespace NsdRpc.Benchmarks.Wire;
+
+message Blob
+{
+    byte[]? Data = 0;
+}

@@ -26,6 +26,7 @@ The testing rules live in [testing](testing.md).
 dotnet build
 dotnet build --configuration Release
 dotnet test                                         # xunit, edge-case tests
+dotnet run --project NsdRpc.Benchmarks -c Release -- --filter '*'  # benchmarks
 dotnet pack NsdRpc/NsdRpc.csproj -o ./.packages/    # NuGet package
 dotnet pack NsdRpc.Generators/NsdRpc.Generators.csproj -o ./.packages/
 ```

@@ -8,6 +8,7 @@ Fetch only the doc you need. Never fetch the whole tree.
 | How to work in this repo: toolchain, build, commits | [development](development.md) |
 | Coding style: Tiger Style and the Power of 10 in C# | [specs/coding-style](specs/coding-style.md) |
 | Testing doctrine: edge cases, determinism, fuzzing | [testing](testing.md) |
+| Performance baselines: how to run the benchmarks | [performance](performance.md) |
 | As-built architecture and module map | [architecture](architecture.md) |
 | nsd schemas and the wire format | [specs/nsd-schemas](specs/nsd-schemas.md) |
 | RPC wire protocol and envelope | [specs/rpc-protocol](specs/rpc-protocol.md) |

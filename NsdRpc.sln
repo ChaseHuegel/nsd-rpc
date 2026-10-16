@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chat.Raw", "samples\Chat.Ra
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Chat.Generated", "samples\Chat.Generated\Chat.Generated.csproj", "{8F1274CB-8BD3-41E1-8CC8-26A4F5C73EFD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NsdRpc.Benchmarks", "NsdRpc.Benchmarks\NsdRpc.Benchmarks.csproj", "{AB8333AE-AF17-4197-AE0E-018F6721FFFD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -127,6 +129,18 @@ Global
 		{8F1274CB-8BD3-41E1-8CC8-26A4F5C73EFD}.Release|x64.Build.0 = Release|Any CPU
 		{8F1274CB-8BD3-41E1-8CC8-26A4F5C73EFD}.Release|x86.ActiveCfg = Release|Any CPU
 		{8F1274CB-8BD3-41E1-8CC8-26A4F5C73EFD}.Release|x86.Build.0 = Release|Any CPU
+		{AB8333AE-AF17-4197-AE0E-018F6721FFFD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AB8333AE-AF17-4197-AE0E-018F6721FFFD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AB8333AE-AF17-4197-AE0E-018F6721FFFD}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{AB8333AE-AF17-4197-AE0E-018F6721FFFD}.Debug|x64.Build.0 = Debug|Any CPU
+		{AB8333AE-AF17-4197-AE0E-018F6721FFFD}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{AB8333AE-AF17-4197-AE0E-018F6721FFFD}.Debug|x86.Build.0 = Debug|Any CPU
+		{AB8333AE-AF17-4197-AE0E-018F6721FFFD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AB8333AE-AF17-4197-AE0E-018F6721FFFD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AB8333AE-AF17-4197-AE0E-018F6721FFFD}.Release|x64.ActiveCfg = Release|Any CPU
+		{AB8333AE-AF17-4197-AE0E-018F6721FFFD}.Release|x64.Build.0 = Release|Any CPU
+		{AB8333AE-AF17-4197-AE0E-018F6721FFFD}.Release|x86.ActiveCfg = Release|Any CPU
+		{AB8333AE-AF17-4197-AE0E-018F6721FFFD}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

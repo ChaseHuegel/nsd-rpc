@@ -4,6 +4,9 @@ obj/
 .packages/
 TestResults/
 
+# BenchmarkDotNet
+BenchmarkDotNet.Artifacts/
+
 # IDE
 .vs/
 .idea/

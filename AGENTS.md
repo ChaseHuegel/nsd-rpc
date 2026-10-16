@@ -22,6 +22,7 @@ anything.
 | Goal | Doc |
 |---|---|
 | Build, test, or commit | [docs/development.md](docs/development.md) |
+| Measure performance or memory | [docs/performance.md](docs/performance.md) |
 | Write any code | [docs/specs/coding-style.md](docs/specs/coding-style.md) |
 | Write any test | [docs/testing.md](docs/testing.md) |
 | Understand the project layout | [docs/architecture.md](docs/architecture.md) |
