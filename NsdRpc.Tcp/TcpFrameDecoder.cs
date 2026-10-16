@@ -4,8 +4,11 @@ using NsdRpc;
 namespace NsdRpc.Tcp;
 
 // Turns a byte stream into frames. A frame is a 4-byte little-endian length
-// prefix and the payload bytes. The decoder rejects a zero length, a length
-// above MaxFrameBytes, and an incomplete frame stays buffered.
+// prefix and the payload bytes. The decoder rejects a zero length and a
+// length above MaxFrameBytes. An incomplete frame stays buffered.
+//
+// The buffer holds at most one frame. A read that spans a frame boundary is
+// copied and processed in slices, so a large read never needs a large buffer.
 internal sealed class TcpFrameDecoder
 {
     private readonly int _maxFrameBytes;
@@ -22,31 +25,45 @@ internal sealed class TcpFrameDecoder
 
     public bool TryPush(ReadOnlySpan<byte> data, RpcFrameHandler onFrame)
     {
-        int needed = _count + data.Length;
-        if (needed > _buffer.Length)
+        if (data.Length == 0)
         {
-            int newSize = _buffer.Length;
-            while (newSize < needed)
+            return TryEmitFrames(onFrame);
+        }
+
+        int offset = 0;
+        while (offset < data.Length)
+        {
+            if (_count == _buffer.Length)
             {
-                newSize *= 2;
+                // Complete frames leave the buffer before it grows.
+                if (!TryEmitFrames(onFrame))
+                {
+                    return false;
+                }
+
+                if (_count == _buffer.Length && !TryGrowBuffer())
+                {
+                    return false;
+                }
             }
 
-            if (newSize > _maxFrameBytes + 4)
-            {
-                newSize = _maxFrameBytes + 4;
-            }
+            int chunk = Math.Min(_buffer.Length - _count, data.Length - offset);
+            data.Slice(offset, chunk).CopyTo(_buffer.AsSpan(_count));
+            _count += chunk;
+            offset += chunk;
 
-            if (newSize < needed)
+            if (!TryEmitFrames(onFrame))
             {
                 return false;
             }
-
-            Array.Resize(ref _buffer, newSize);
         }
 
-        data.CopyTo(_buffer.AsSpan(_count));
-        _count = needed;
+        return true;
+    }
 
+    // Emits every complete frame and compacts the remainder to the front.
+    private bool TryEmitFrames(RpcFrameHandler onFrame)
+    {
         int start = 0;
         while (_count - start >= 4)
         {
@@ -61,7 +78,6 @@ internal sealed class TcpFrameDecoder
                 break;
             }
 
-            // Emit the whole frame: the length prefix and the payload.
             onFrame(_buffer.AsSpan(start, 4 + length));
             start += 4 + length;
         }
@@ -72,6 +88,27 @@ internal sealed class TcpFrameDecoder
             Buffer.BlockCopy(_buffer, start, _buffer, 0, _count);
         }
 
+        Invariant.That(
+            _count <= _maxFrameBytes + 4,
+            "The frame decoder retains more than one frame.");
+        return true;
+    }
+
+    private bool TryGrowBuffer()
+    {
+        int maximum = _maxFrameBytes + 4;
+        int newSize = _buffer.Length * 2;
+        if (newSize > maximum)
+        {
+            newSize = maximum;
+        }
+
+        if (newSize <= _buffer.Length)
+        {
+            return false;
+        }
+
+        Array.Resize(ref _buffer, newSize);
         return true;
     }
 }

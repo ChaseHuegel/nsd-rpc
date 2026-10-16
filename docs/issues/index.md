@@ -9,7 +9,7 @@ add or work an issue.
 ### Bug
 
 - [x] [TcpServerTransport leaks accepted connections](/docs/issues/0031-tcp-accepted-connection-leak.md) — a disconnected client stays in the accepted list.
-- [ ] [Frame decoder rejects valid data near the frame cap](/docs/issues/0032-frame-decoder-false-rejection.md) — a read that spans a frame boundary kills the connection.
+- [x] [Frame decoder rejects valid data near the frame cap](/docs/issues/0032-frame-decoder-false-rejection.md) — a read that spans a frame boundary kills the connection.
 - [ ] [The TCP accept loop stalls on a silent client](/docs/issues/0033-tcp-handshake-accept-stall.md) — handshakes run serially and have no deadline.
 - [ ] [MaxFrameBytes semantics disagree and the default blocks valid frames](/docs/issues/0034-max-frame-bytes-semantics.md) — the peer and the decoder use different bounds.
 - [ ] [Envelope version mismatch does not close the connection](/docs/issues/0035-envelope-version-mismatch-close.md) — the peer faults calls and leaves the socket open.

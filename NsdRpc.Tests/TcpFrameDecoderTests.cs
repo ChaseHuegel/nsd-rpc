@@ -128,6 +128,74 @@ public sealed class TcpFrameDecoderTests
     }
 
     [Fact]
+    public void DecoderAcceptsAMaximumFrameSplitBeforeTheNextFrame()
+    {
+        var decoder = new TcpFrameDecoder(4096);
+        List<byte[]> frames = [];
+        byte[] payload = new byte[4096];
+        byte[] firstFrame = Frame(payload);
+        byte[] stream = [.. firstFrame, .. Frame([1, 2, 3])];
+
+        // The first part stops one byte short of the maximum frame.
+        bool first = decoder.TryPush(
+            stream.AsSpan(0, firstFrame.Length - 1), span => frames.Add(span.ToArray()));
+        // The second part holds the missing byte and the whole next frame.
+        bool second = decoder.TryPush(
+            stream.AsSpan(firstFrame.Length - 1), span => frames.Add(span.ToArray()));
+
+        Assert.True(first);
+        Assert.True(second);
+        AssertFrames(frames, payload, [1, 2, 3]);
+    }
+
+    [Fact]
+    public void DecoderAcceptsAReadAboveTheCapThatHoldsAFrameAndTheNextStart()
+    {
+        var decoder = new TcpFrameDecoder(4096);
+        List<byte[]> frames = [];
+        byte[] payload = new byte[4096];
+        byte[] firstFrame = Frame(payload);
+        byte[] stream = [.. firstFrame, .. Frame([1, 2, 3])];
+        int read = firstFrame.Length + 4;
+
+        // The read holds the whole first frame and the next frame prefix. It
+        // is above the frame cap.
+        bool first = decoder.TryPush(stream.AsSpan(0, read), span => frames.Add(span.ToArray()));
+        bool second = decoder.TryPush(stream.AsSpan(read), span => frames.Add(span.ToArray()));
+
+        Assert.True(read > decoder.MaxFrameBytes + 4);
+        Assert.True(first);
+        Assert.True(second);
+        AssertFrames(frames, payload, [1, 2, 3]);
+    }
+
+    [Fact]
+    public void DecoderFuzzesSplitPointsNearTheCap()
+    {
+        var decoder = new TcpFrameDecoder(4096);
+        List<byte[]> frames = [];
+        byte[] payload = new byte[4096];
+        for (int index = 0; index < payload.Length; index++)
+        {
+            payload[index] = (byte)index;
+        }
+
+        byte[] stream = [.. Frame(payload), .. Frame([1, 2, 3])];
+        var random = new Random(6789);
+        int offset = 0;
+        while (offset < stream.Length)
+        {
+            int chunk = Math.Min(random.Next(1, 512), stream.Length - offset);
+            Assert.True(
+                decoder.TryPush(stream.AsSpan(offset, chunk), span => frames.Add(span.ToArray())),
+                "The decoder rejected valid data at offset " + offset);
+            offset += chunk;
+        }
+
+        AssertFrames(frames, payload, [1, 2, 3]);
+    }
+
+    [Fact]
     public void DecoderFuzzNeverThrows()
     {
         var decoder = new TcpFrameDecoder(64);

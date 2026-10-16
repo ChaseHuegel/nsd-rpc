@@ -1,7 +1,7 @@
 # Bug: Frame decoder rejects valid data near the frame cap
 
 - Type: bug
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem

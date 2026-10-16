@@ -44,6 +44,10 @@
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
       <_Parameter1>NsdRpc.Tests</_Parameter1>
     </AssemblyAttribute>
+    <!-- The TCP transport uses the always-on assert helper. -->
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>NsdRpc.Tcp</_Parameter1>
+    </AssemblyAttribute>
   </ItemGroup>
 
 </Project>
