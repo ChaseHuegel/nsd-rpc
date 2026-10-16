@@ -168,12 +168,12 @@ public sealed class TcpServerTransport : IRpcServerTransport
             return;
         }
 
-        connection.StartReceiving();
         lock (_readyLock)
         {
             _ready.Enqueue(connection);
         }
-
+        
+        connection.StartReceiving();
         _readySignal.Release();
     }
 

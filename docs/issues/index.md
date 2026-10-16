@@ -43,7 +43,7 @@ add or work an issue.
 
 ### Bug
 
-- [ ] [The server transport drops a frame that arrives before the peer subscribes](/docs/issues/0047-tcp-early-frame-drop.md) — the receive loop starts before the frame handler subscribes.
+- [x] [The server transport drops a frame that arrives before the peer subscribes](/docs/issues/0047-tcp-early-frame-drop.md) — the receive loop starts before the frame handler subscribes.
 - [ ] [The generated reader cannot reject an unknown field id among known ids](/docs/issues/0048-generated-unknown-id-rejection.md) — the nsd format cannot skip an unknown field.
 
 ### Improvement

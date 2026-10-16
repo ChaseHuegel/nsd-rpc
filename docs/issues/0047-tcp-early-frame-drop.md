@@ -26,7 +26,7 @@ it.
 
 ## Acceptance criteria
 
-- [ ] The receive loop starts only after the consumer can subscribe, or the connection buffers frames until a handler exists.
+- [x] The receive loop starts only after the consumer can subscribe, or the connection buffers frames until a handler exists.
 - [ ] A test writes the handshake and a request in one send. The request dispatches and the call completes.
 - [ ] A late subscriber still receives every buffered frame in order.
 - [ ] A frame that arrives with no subscriber and no buffer rule never drops silently.
