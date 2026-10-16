@@ -15,18 +15,23 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
 {
     private readonly Socket _socket;
     private readonly TcpFrameDecoder _decoder;
+    private readonly RpcOptions _rpcOptions;
     private readonly TcpOptions _tcpOptions;
     private readonly ArrayPool<byte> _receiveBufferPool;
     private readonly RpcFrameHandler _onFrame;
     private readonly object _sendLock = new();
     private readonly Queue<SendBuffer> _sendQueue = new();
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly long _idleShrinkAfterNanos;
+    private readonly TimeSpan _idleShrinkDelay;
     private Action? _disconnectedHandlers;
     private RpcFrameHandler? _frameReceivedHandlers;
     private int _queuedBytes;
     private bool _sending;
     private bool _receiving;
     private int _disconnected;
+    private int _idleSweepRunning;
+    private long _lastReadNanos;
 
     public TcpConnection(Socket socket, RpcOptions rpcOptions, TcpOptions tcpOptions)
         : this(socket, rpcOptions, tcpOptions, ArrayPool<byte>.Shared)
@@ -39,14 +44,21 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
         Socket socket, RpcOptions rpcOptions, TcpOptions tcpOptions, ArrayPool<byte> receiveBufferPool)
     {
         _socket = socket;
+        _rpcOptions = rpcOptions;
         _tcpOptions = tcpOptions;
         _receiveBufferPool = receiveBufferPool;
         _decoder = new TcpFrameDecoder(rpcOptions.MaxFrameBytes);
+        _lastReadNanos = rpcOptions.TimestampNanos();
+        _idleShrinkAfterNanos = IdleShrinkNanos(tcpOptions.DecoderIdleShrinkAfter);
+        _idleShrinkDelay = IdleShrinkDelay(tcpOptions.DecoderIdleShrinkAfter);
         // One delegate for the connection. The receive loop must not allocate.
         _onFrame = OnFrame;
     }
 
     public bool IsConnected => _disconnected == 0;
+
+    // The decoder buffer bytes. Tests read it to pin the idle shrink.
+    internal int DecoderBufferBytes => _decoder.BufferBytes;
 
     public event Action Disconnected
     {
@@ -290,11 +302,81 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
                 return false;
             }
 
-            return _decoder.TryPush(buffer.AsSpan(0, read), _onFrame);
+            Volatile.Write(ref _lastReadNanos, _rpcOptions.TimestampNanos());
+            if (!_decoder.TryPush(buffer.AsSpan(0, read), _onFrame))
+            {
+                return false;
+            }
+
+            EnsureIdleSweep();
+            return true;
         }
         finally
         {
             _receiveBufferPool.Return(buffer, clearArray: true);
+        }
+    }
+
+    // Shrinks the decoder when it is grown and has been idle for the idle
+    // period. The idle sweep calls it. Returns true when the buffer shrank.
+    internal bool TryShrinkDecoder()
+    {
+        long idleNanos = _rpcOptions.TimestampNanos() - Volatile.Read(ref _lastReadNanos);
+        if (idleNanos < _idleShrinkAfterNanos)
+        {
+            return false;
+        }
+
+        return _decoder.TryShrink();
+    }
+
+    private void EnsureIdleSweep()
+    {
+        if (_idleShrinkAfterNanos <= 0L)
+        {
+            return;
+        }
+
+        if (_decoder.BufferBytes <= TcpFrameDecoder.StartBufferBytes)
+        {
+            return;
+        }
+
+        if (Interlocked.CompareExchange(ref _idleSweepRunning, 1, 0) != 0)
+        {
+            return;
+        }
+
+        _ = IdleSweepLoopAsync();
+    }
+
+    // One idle timer per grown decoder. It starts when the decoder first grows
+    // above its start size and stops after the shrink, or on the disconnect.
+    // A connection that never grows holds no timer.
+    private async Task IdleSweepLoopAsync()
+    {
+        try
+        {
+            while (_decoder.BufferBytes > TcpFrameDecoder.StartBufferBytes)
+            {
+                try
+                {
+                    await Task.Delay(_idleShrinkDelay, _lifetime.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                if (TryShrinkDecoder())
+                {
+                    return;
+                }
+            }
+        }
+        finally
+        {
+            Volatile.Write(ref _idleSweepRunning, 0);
         }
     }
 
@@ -369,6 +451,35 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
 
             filled += read;
         }
+    }
+
+    private static long IdleShrinkNanos(TimeSpan value)
+    {
+        if (value <= TimeSpan.Zero)
+        {
+            return 0L;
+        }
+
+        try
+        {
+            return checked(value.Ticks * 100L);
+        }
+        catch (OverflowException)
+        {
+            return long.MaxValue;
+        }
+    }
+
+    // Task.Delay rejects a delay above Int32.MaxValue milliseconds.
+    private static TimeSpan IdleShrinkDelay(TimeSpan value)
+    {
+        if (value <= TimeSpan.Zero)
+        {
+            return TimeSpan.Zero;
+        }
+
+        TimeSpan max = TimeSpan.FromMilliseconds(int.MaxValue);
+        return value > max ? max : value;
     }
 
     private void OnFrame(ReadOnlySpan<byte> frame)

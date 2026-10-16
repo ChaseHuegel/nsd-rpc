@@ -233,4 +233,42 @@ public sealed class TcpFrameDecoderTests
             Assert.InRange(frame.Length, 1, 64);
         }
     }
+
+    [Fact]
+    public void DecoderShrinksToTheStartSize()
+    {
+        var decoder = new TcpFrameDecoder(16384);
+        byte[] payload = new byte[5000];
+
+        Assert.True(decoder.TryPush(Frame(payload), span => { }));
+        Assert.True(decoder.BufferBytes > TcpFrameDecoder.StartBufferBytes);
+
+        Assert.True(decoder.TryShrink());
+
+        Assert.Equal(TcpFrameDecoder.StartBufferBytes, decoder.BufferBytes);
+    }
+
+    [Fact]
+    public void DecoderDoesNotShrinkWithAPartialFrame()
+    {
+        var decoder = new TcpFrameDecoder(16384);
+        byte[] stream = Frame(new byte[6000]);
+
+        // The read stops inside the frame, so the buffer grows and holds a
+        // partial frame.
+        Assert.True(decoder.TryPush(stream.AsSpan(0, 5000), span => { }));
+        Assert.True(decoder.BufferBytes > TcpFrameDecoder.StartBufferBytes);
+
+        Assert.False(decoder.TryShrink());
+        Assert.True(decoder.BufferBytes > TcpFrameDecoder.StartBufferBytes);
+    }
+
+    [Fact]
+    public void DecoderDoesNotShrinkAtTheStartSize()
+    {
+        var decoder = new TcpFrameDecoder(16384);
+
+        Assert.False(decoder.TryShrink());
+        Assert.Equal(TcpFrameDecoder.StartBufferBytes, decoder.BufferBytes);
+    }
 }

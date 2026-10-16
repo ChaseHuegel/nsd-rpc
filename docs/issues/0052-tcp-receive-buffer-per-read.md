@@ -37,11 +37,11 @@ extra CPU on a full 65,536-byte read stream.
 
 `ReceiveOnceAsync` rents the buffer, reads once, pushes, and returns the
 buffer
-([TcpConnection.cs:271](../../NsdRpc.Tcp/TcpConnection.cs:271)). The buffer is
+([TcpConnection.cs:283](../../NsdRpc.Tcp/TcpConnection.cs:283)). The buffer is
 a local of one receive step, so no connection field holds it across reads.
 
 The loop waits for data before it rents
-([TcpConnection.cs:247](../../NsdRpc.Tcp/TcpConnection.cs:247)). The wait is a
+([TcpConnection.cs:259](../../NsdRpc.Tcp/TcpConnection.cs:259)). The wait is a
 zero-length receive. A zero-length receive returns when the socket is
 readable and does not consume the data. The wait holds no buffer, so an idle
 connection holds none. The wait adds one zero-length receive per read. The

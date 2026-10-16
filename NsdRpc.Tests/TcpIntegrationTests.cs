@@ -741,6 +741,100 @@ public sealed class TcpIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task ConnectionShrinksAnIdleDecoder()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var clock = new FakeClock();
+            var options = new RpcOptions { TimestampNanos = clock.Now };
+            var tcpOptions = new TcpOptions { DecoderIdleShrinkAfter = TimeSpan.FromSeconds(30) };
+            var connection = new TcpConnection(client, options, tcpOptions);
+
+            await server.SendAsync(Frame(new byte[5000]), SocketFlags.None);
+            Assert.True(await connection.ReceiveOnceAsync().WaitAsync(TimeSpan.FromSeconds(10)));
+            Assert.True(connection.DecoderBufferBytes > TcpFrameDecoder.StartBufferBytes);
+
+            clock.Advance(TimeSpan.FromSeconds(30));
+
+            Assert.True(connection.TryShrinkDecoder());
+            Assert.Equal(TcpFrameDecoder.StartBufferBytes, connection.DecoderBufferBytes);
+            connection.Close();
+        }
+    }
+
+    [Fact]
+    public async Task ConnectionKeepsADecoderThatRecentlyRead()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var clock = new FakeClock();
+            var options = new RpcOptions { TimestampNanos = clock.Now };
+            var tcpOptions = new TcpOptions { DecoderIdleShrinkAfter = TimeSpan.FromSeconds(30) };
+            var connection = new TcpConnection(client, options, tcpOptions);
+
+            await server.SendAsync(Frame(new byte[5000]), SocketFlags.None);
+            Assert.True(await connection.ReceiveOnceAsync().WaitAsync(TimeSpan.FromSeconds(10)));
+            Assert.True(connection.DecoderBufferBytes > TcpFrameDecoder.StartBufferBytes);
+
+            // Below the idle period the decoder stays grown.
+            clock.Advance(TimeSpan.FromSeconds(29));
+
+            Assert.False(connection.TryShrinkDecoder());
+            Assert.True(connection.DecoderBufferBytes > TcpFrameDecoder.StartBufferBytes);
+            connection.Close();
+        }
+    }
+
+    [Fact]
+    public async Task LargeFrameStreamDoesNotShrinkTheDecoder()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var clock = new FakeClock();
+            var options = new RpcOptions { TimestampNanos = clock.Now };
+            var tcpOptions = new TcpOptions { DecoderIdleShrinkAfter = TimeSpan.FromSeconds(30) };
+            var connection = new TcpConnection(client, options, tcpOptions);
+
+            for (int index = 0; index < 3; index++)
+            {
+                await server.SendAsync(Frame(new byte[5000]), SocketFlags.None);
+                Assert.True(await connection.ReceiveOnceAsync().WaitAsync(TimeSpan.FromSeconds(10)));
+
+                // Each read resets the idle period, so the sweep never shrinks
+                // the decoder between the frames.
+                clock.Advance(TimeSpan.FromSeconds(1));
+                Assert.False(connection.TryShrinkDecoder());
+            }
+
+            Assert.True(connection.DecoderBufferBytes > TcpFrameDecoder.StartBufferBytes);
+            connection.Close();
+        }
+    }
+
+    // A settable monotonic timestamp source. Tests advance it to cross the
+    // decoder idle period.
+    private sealed class FakeClock
+    {
+        private long _nanos;
+
+        public long Now()
+        {
+            return _nanos;
+        }
+
+        public void Advance(TimeSpan span)
+        {
+            _nanos += span.Ticks * 100L;
+        }
+    }
+
     // A pooled array source that counts the rent and the return. It proves the
     // receive loop rents per read and returns the buffer on every path.
     private sealed class CountingPool : ArrayPool<byte>

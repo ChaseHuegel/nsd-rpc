@@ -95,6 +95,7 @@ The TCP transport options live in
 | `NoDelay` | `true` | Disables Nagle's algorithm. |
 | `HandshakeTimeout` | 10 seconds | The deadline for one handshake. Zero or negative disables it. |
 | `ReceiveBufferBytes` | 65,536 | The receive buffer size per read. The receive loop rents it per read. |
+| `DecoderIdleShrinkAfter` | 30 seconds | The decoder shrinks to its start size after this idle period. Zero or negative disables it. |
 | `SendQueueBytes` | 1,048,576 | The largest queued send bytes for one connection. A full queue rejects the send. |
 
 The server transport completes each handshake in the background. A silent

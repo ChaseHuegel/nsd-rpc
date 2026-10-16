@@ -12,19 +12,55 @@ namespace NsdRpc.Tcp;
 // copied and processed in slices, so a large read never needs a large buffer.
 internal sealed class TcpFrameDecoder
 {
+    public const int StartBufferBytes = 4096;
+
     private readonly int _maxFrameBytes;
+    // The idle sweep shrinks the buffer while the receive loop may push. The
+    // lock keeps the two off each other.
+    private readonly object _gate = new();
     private byte[] _buffer;
     private int _count;
 
     public TcpFrameDecoder(int maxFrameBytes)
     {
         _maxFrameBytes = maxFrameBytes;
-        _buffer = new byte[4096];
+        _buffer = new byte[StartBufferBytes];
     }
 
     public int MaxFrameBytes => _maxFrameBytes;
 
+    public int BufferBytes => _buffer.Length;
+
     public bool TryPush(ReadOnlySpan<byte> data, RpcFrameHandler onFrame)
+    {
+        lock (_gate)
+        {
+            return TryPushLocked(data, onFrame);
+        }
+    }
+
+    // Shrinks the buffer to the start size. Returns false when the decoder
+    // holds a partial frame or already sits at the start size.
+    public bool TryShrink()
+    {
+        lock (_gate)
+        {
+            if (_count != 0)
+            {
+                return false;
+            }
+
+            if (_buffer.Length == StartBufferBytes)
+            {
+                return false;
+            }
+
+            _buffer = new byte[StartBufferBytes];
+            return true;
+        }
+    }
+
+    private bool TryPushLocked(ReadOnlySpan<byte> data, RpcFrameHandler onFrame)
     {
         if (data.Length == 0)
         {

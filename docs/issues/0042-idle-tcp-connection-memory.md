@@ -152,7 +152,7 @@ throughput on a busy link. A 60 KB frame stream drops from about 2,400 to
 
 The receive loop rents `ReceiveBufferBytes` before each read and returns
 the buffer after `TryPush`
-([TcpConnection.cs:271](../../NsdRpc.Tcp/TcpConnection.cs:271)). An idle
+([TcpConnection.cs:283](../../NsdRpc.Tcp/TcpConnection.cs:283)). An idle
 connection holds no receive buffer.
 
 - Steady-state memory: the decoder plus the fixed objects, about 8,601 live
