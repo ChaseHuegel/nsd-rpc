@@ -22,7 +22,7 @@ public sealed class RpcPeer : IRpcHost
 
     private readonly object _pendingLock = new();
     private readonly Dictionary<ulong, PendingCallBase> _pending = new();
-    private readonly PendingCallBase[] _expiredScratch;
+    private PendingCallBase[]? _expiredScratch;
     private ulong _nextId = 1;
     private bool _idOverflowed;
 
@@ -48,7 +48,6 @@ public sealed class RpcPeer : IRpcHost
         _timestampNanos = _options.TimestampNanos;
         _isServer = connection is IServerConnection;
         _clientId = (connection as IServerConnection)?.ClientId ?? 0UL;
-        _expiredScratch = new PendingCallBase[_options.MaxPendingCalls];
         _selfPeers = [this];
         _connection.Disconnected += OnDisconnected;
         _connection.FrameReceived += HandleFrame;
@@ -350,8 +349,12 @@ public sealed class RpcPeer : IRpcHost
     public void CheckTimeouts(long timestampNanos)
     {
         int count = 0;
+        PendingCallBase[] scratch;
         lock (_pendingLock)
         {
+            // Allocate the scratch on the first check, so an idle peer holds no
+            // scratch array.
+            scratch = _expiredScratch ??= new PendingCallBase[_options.MaxPendingCalls];
             foreach (KeyValuePair<ulong, PendingCallBase> pair in _pending)
             {
                 if (pair.Value.DeadlineNanos > timestampNanos)
@@ -359,7 +362,7 @@ public sealed class RpcPeer : IRpcHost
                     continue;
                 }
 
-                _expiredScratch[count] = pair.Value;
+                scratch[count] = pair.Value;
                 count++;
             }
 
@@ -367,13 +370,13 @@ public sealed class RpcPeer : IRpcHost
 
             for (int i = 0; i < count; i++)
             {
-                _pending.Remove(_expiredScratch[i].Id);
+                _pending.Remove(scratch[i].Id);
             }
         }
 
         for (int i = 0; i < count; i++)
         {
-            PendingCallBase pending = _expiredScratch[i];
+            PendingCallBase pending = scratch[i];
             pending.DisposeRegistration();
             SendCancellationFrame(pending.Id);
             pending.Fail((int)RpcErrorCode.RequestTimeout, "request timed out");

@@ -1,7 +1,7 @@
 # Improvement: Allocate the peer timeout scratch lazily
 
 - Type: improvement
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -23,6 +23,12 @@ own snapshot already.
 
 ## Acceptance criteria
 
-- [ ] A new peer allocates no scratch array. A test measures the allocations of a default peer construction and asserts a bound below 8 kilobytes.
-- [ ] The first `CheckTimeouts` call allocates the scratch once. Later calls reuse it.
-- [ ] Timeout and fault tests pass unchanged.
+- [x] A new peer allocates no scratch array. A test measures the allocations of a default peer construction and asserts a bound below 8 kilobytes.
+- [x] The first `CheckTimeouts` call allocates the scratch once. Later calls reuse it.
+- [x] Timeout and fault tests pass unchanged.
+
+## Resolution
+
+`RpcPeer` allocates the scratch array on the first `CheckTimeouts` call and
+reuses it. The construction test records an average below 4,096 bytes per
+peer. The scratch test proves later checks allocate nothing.

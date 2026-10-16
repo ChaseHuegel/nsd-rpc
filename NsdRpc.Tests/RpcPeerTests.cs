@@ -570,6 +570,43 @@ public sealed class RpcPeerTests
     }
 
     [Fact]
+    public void PeerConstructionDoesNotAllocateTheTimeoutScratch()
+    {
+        // The default MaxPendingCalls is 1024, so the scratch would add 8 KB.
+        for (int index = 0; index < 4; index++)
+        {
+            _ = new RpcPeer(new InMemoryConnection());
+        }
+
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        for (int index = 0; index < 10; index++)
+        {
+            _ = new RpcPeer(new InMemoryConnection());
+        }
+
+        long allocatedAfter = GC.GetAllocatedBytesForCurrentThread();
+        Assert.True(
+            (allocatedAfter - allocatedBefore) / 10 < 4096,
+            "allocated " + ((allocatedAfter - allocatedBefore) / 10));
+    }
+
+    [Fact]
+    public void CheckTimeoutsAllocatesTheScratchOnce()
+    {
+        var peer = new RpcPeer(new InMemoryConnection());
+
+        // The first check publishes the scratch.
+        peer.CheckTimeouts(0);
+
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        peer.CheckTimeouts(0);
+        peer.CheckTimeouts(0);
+        long allocatedAfter = GC.GetAllocatedBytesForCurrentThread();
+
+        Assert.Equal(allocatedBefore, allocatedAfter);
+    }
+
+    [Fact]
     public async Task CancelledTokenBeforeSendDoesNotSendTheRequest()
     {
         var connection = new InMemoryConnection();
