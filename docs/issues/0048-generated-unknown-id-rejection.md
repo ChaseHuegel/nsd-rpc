@@ -1,7 +1,7 @@
 # Bug: The generated reader cannot reject an unknown field id among known ids
 
 - Type: bug
-- Status: open
+- Status: wont-fix
 - Workflow: ../specs/issues.md
 
 ## Problem
