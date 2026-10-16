@@ -31,6 +31,7 @@ tests.
 ## What not to write
 
 - No happy-path-only tests. A test that cannot fail proves nothing.
+- No tests for test fixtures. The tests that use a fake prove the fake.
 - No sleeps or retries for timing.
 - No tests that depend on execution order or parallel workers.
 - No tests of generated internals the schema already pins. Test the
@@ -38,26 +39,48 @@ tests.
 
 ## Current coverage
 
-[NsdRpc.Tests/HandshakeTests.cs](../NsdRpc.Tests/HandshakeTests.cs:10) pins:
+The wire tests pin the generated types against the contract in
+[nsd-schemas](specs/nsd-schemas.md):
 
-- round-trips for boundary values, spans, and offsets;
-- deterministic output;
-- the exact wire size of `Handshake`;
-- zero allocation on the span round-trip;
-- empty-buffer behavior.
+- [HandshakeTests.cs](../NsdRpc.Tests/HandshakeTests.cs:5) pins round trips
+  for boundary values, spans, and offsets, deterministic output, the exact
+  wire size, the zero-allocation span round trip, and the empty-buffer rule.
+- [EnvelopeTests.cs](../NsdRpc.Tests/EnvelopeTests.cs:6) pins the envelope
+  wire facts: sizes, caps, kinds, boundary ids, trailing unknown bytes, and
+  truncation safety.
+- [RpcErrorTests.cs](../NsdRpc.Tests/RpcErrorTests.cs:6) pins the error round
+  trip, the minimum wire size, deterministic output, and truncation safety.
+- [TruncatedBufferTests.cs](../NsdRpc.Tests/TruncatedBufferTests.cs:6) pins
+  the exact reader outcome at every truncation length and rejects a bad start
+  and length.
+- [RpcOptionsTests.cs](../NsdRpc.Tests/RpcOptionsTests.cs:5) pins the option
+  defaults and the monotonic default clock.
+- [RpcResultTests.cs](../NsdRpc.Tests/RpcResultTests.cs:6) pins the result
+  values, the zero-code rejection, and zero allocation on success.
 
-The RPC tests pin the rest:
+The engine tests pin the protocol rules in
+[rpc-protocol](specs/rpc-protocol.md):
 
-- [EnvelopeTests.cs](../NsdRpc.Tests/EnvelopeTests.cs:8) pins the envelope
-  wire facts: sizes, caps, kinds, boundary ids, and truncation safety.
-- [RpcPeerTests.cs](../NsdRpc.Tests/RpcPeerTests.cs:8) pins the engine rules:
-  correlation, timeouts against a fake clock, cancellation, faults, and the
-  drop-and-log rules.
-- [RpcDispatcherTests.cs](../NsdRpc.Tests/RpcDispatcherTests.cs:8) pins
-  dispatch errors, the app code range, directions, and handler tokens.
-- [TcpFrameDecoderTests.cs](../NsdRpc.Tests/TcpFrameDecoderTests.cs:8) pins
-  the framing contract and fuzzes the decoder.
-- [TcpIntegrationTests.cs](../NsdRpc.Tests/TcpIntegrationTests.cs:8) pins
-  the handshake and round trips over loopback sockets.
-- [RpcStreamingTests.cs](../NsdRpc.Tests/RpcStreamingTests.cs:8) pins
-  streams, keep-alive, overflow, and every cancellation case.
+- [RpcPeerTests.cs](../NsdRpc.Tests/RpcPeerTests.cs:6) pins correlation,
+  out-of-order responses, timeouts against a fake clock, cancellation, faults,
+  streaming, keep-alive, the malformed frame and envelope rules, the
+  drop-and-log rules, the dispatch fallbacks, and the argument guards.
+- [RpcDispatcherTests.cs](../NsdRpc.Tests/RpcDispatcherTests.cs:6) pins
+  dispatch errors, the app code range, directions, handler tokens, and silent
+  notification failures.
+- [RpcStreamingTests.cs](../NsdRpc.Tests/RpcStreamingTests.cs:7) pins the
+  session wrapper, a waiting consumer, overflow, and every cancellation case.
+- [RpcRegistryTests.cs](../NsdRpc.Tests/RpcRegistryTests.cs:22) pins fail-fast
+  registration, scanning, explicit ids, and services.
+- [RpcClientTests.cs](../NsdRpc.Tests/RpcClientTests.cs:6) and
+  [RpcServerTests.cs](../NsdRpc.Tests/RpcServerTests.cs:6) pin the composition
+  roots: calls, streams, notifications, accept, disconnect, prune, close, and
+  the lifecycle guards.
+
+The transport tests pin the TCP layer:
+
+- [TcpFrameDecoderTests.cs](../NsdRpc.Tests/TcpFrameDecoderTests.cs:6) pins
+  the framing contract, buffer growth, the cap, and fuzzing.
+- [TcpIntegrationTests.cs](../NsdRpc.Tests/TcpIntegrationTests.cs:10) pins the
+  handshake and round trips over loopback sockets, the bad-handshake skip, the
+  handshake framing errors, the send-queue bound, and the disconnect paths.

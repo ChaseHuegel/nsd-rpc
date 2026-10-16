@@ -2,34 +2,79 @@ using NsdRpc;
 
 namespace NsdRpc.Tests;
 
-// A listener with a fixed queue of pending connections. AcceptAsync dequeues
-// in order. Close stops the queue and nulls the next accept.
+// A listener the tests drive. AcceptAsync parks until a connection is
+// enqueued or Close runs. Close drops queued connections and releases a
+// parked accept with null.
 internal sealed class FakeServerTransport : IRpcServerTransport
 {
+    private readonly object _lock = new();
     private readonly Queue<IServerConnection> _pending = new();
+    private TaskCompletionSource<IServerConnection?>? _acceptWaiter;
     private bool _closed;
 
-    public int AcceptCount { get; private set; }
+    public int AcceptedCount { get; private set; }
 
     public void Enqueue(IServerConnection connection)
     {
-        _pending.Enqueue(connection);
+        TaskCompletionSource<IServerConnection?>? waiter;
+        lock (_lock)
+        {
+            if (_closed)
+            {
+                return;
+            }
+
+            waiter = _acceptWaiter;
+            if (waiter == null)
+            {
+                _pending.Enqueue(connection);
+                return;
+            }
+
+            _acceptWaiter = null;
+            AcceptedCount++;
+        }
+
+        waiter.TrySetResult(connection);
     }
 
     public Task<IServerConnection?> AcceptAsync()
     {
-        if (_closed)
+        lock (_lock)
         {
-            return Task.FromResult<IServerConnection?>(null);
-        }
+            if (_closed)
+            {
+                return Task.FromResult<IServerConnection?>(null);
+            }
 
-        AcceptCount++;
-        IServerConnection? next = _pending.Count > 0 ? _pending.Dequeue() : null;
-        return Task.FromResult(next);
+            if (_pending.Count > 0)
+            {
+                AcceptedCount++;
+                return Task.FromResult<IServerConnection?>(_pending.Dequeue());
+            }
+
+            if (_acceptWaiter != null)
+            {
+                throw new InvalidOperationException("Only one accept may run at a time.");
+            }
+
+            _acceptWaiter = new TaskCompletionSource<IServerConnection?>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            return _acceptWaiter.Task;
+        }
     }
 
     public void Close()
     {
-        _closed = true;
+        TaskCompletionSource<IServerConnection?>? waiter;
+        lock (_lock)
+        {
+            _closed = true;
+            _pending.Clear();
+            waiter = _acceptWaiter;
+            _acceptWaiter = null;
+        }
+
+        waiter?.TrySetResult(null);
     }
 }

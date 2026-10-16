@@ -42,17 +42,53 @@ public sealed class TcpIntegrationTests
     {
         var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
         Task<IServerConnection?> first = transport.AcceptAsync();
-        Task<IServerConnection?> second = transport.AcceptAsync();
         var firstClient = new TcpClientConnection(
-            new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
-        var secondClient = new TcpClientConnection(
             new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
 
         await firstClient.ConnectAsync();
+        IServerConnection firstConnection = (await first)!;
+
+        // The second accept starts after the first handshake, so connection
+        // order is not a scheduling coincidence.
+        Task<IServerConnection?> second = transport.AcceptAsync();
+        var secondClient = new TcpClientConnection(
+            new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
         await secondClient.ConnectAsync();
 
-        Assert.Equal(1UL, (await first)!.ClientId);
+        Assert.Equal(1UL, firstConnection.ClientId);
         Assert.Equal(2UL, (await second)!.ClientId);
+    }
+
+    [Fact]
+    public async Task TransportCloseMakesAcceptReturnNull()
+    {
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        Task<IServerConnection?> accept = transport.AcceptAsync();
+
+        transport.Close();
+
+        Assert.Null(await accept.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    [Fact]
+    public async Task TransportSkipsAConnectionWithABadHandshake()
+    {
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        Task<IServerConnection?> accept = transport.AcceptAsync();
+
+        // The socket stays open until the end of the test, so the server reads
+        // the bad handshake from a live connection.
+        using var bad = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        await bad.ConnectAsync(IPAddress.Loopback, transport.Port);
+        await SendFrameAsync(bad, new Handshake(2).Serialize());
+
+        var good = new TcpClientConnection(
+            new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
+        await good.ConnectAsync();
+
+        IServerConnection? serverSide = await accept.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.NotNull(serverSide);
+        Assert.Equal(2UL, serverSide.ClientId);
     }
 
     [Fact]
@@ -68,27 +104,164 @@ public sealed class TcpIntegrationTests
                 new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = port });
             Task connect = client.ConnectAsync();
 
-            Socket server = await accept;
-            byte[] header = new byte[4];
-            await ReadExactAsync(server, header);
-            int length = BinaryPrimitives.ReadInt32LittleEndian(header);
-            byte[] payload = new byte[length];
-            await ReadExactAsync(server, payload);
+            using Socket server = await accept;
+            byte[] payload = await ReadFrameAsync(server);
             Handshake received = Handshake.Deserialize((ReadOnlySpan<byte>)payload);
             Assert.Equal(1, received.ProtocolVersion);
 
-            byte[] wrongVersion = new Handshake(2).Serialize();
-            byte[] reply = new byte[4 + wrongVersion.Length];
-            BinaryPrimitives.WriteInt32LittleEndian(reply, wrongVersion.Length);
-            wrongVersion.CopyTo(reply, 4);
-            await server.SendAsync(reply, SocketFlags.None);
+            await SendFrameAsync(server, new Handshake(2).Serialize());
 
-            await Assert.ThrowsAsync<InvalidDataException>(() => connect);
+            await Assert.ThrowsAsync<InvalidDataException>(
+                () => connect.WaitAsync(TimeSpan.FromSeconds(10)));
         }
         finally
         {
             listener.Stop();
         }
+    }
+
+    [Fact]
+    public async Task ClientFailsConnectOnBadHandshakeLength()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            Task<Socket> accept = listener.AcceptSocketAsync();
+            var client = new TcpClientConnection(
+                new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = port });
+            Task connect = client.ConnectAsync();
+
+            using Socket server = await accept;
+            await ReadFrameAsync(server);
+
+            // A zero length fails the handshake frame check.
+            await server.SendAsync(new byte[4], SocketFlags.None);
+
+            await Assert.ThrowsAsync<InvalidDataException>(
+                () => connect.WaitAsync(TimeSpan.FromSeconds(10)));
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task ClientFailsConnectWhenTheServerCloses()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            Task<Socket> accept = listener.AcceptSocketAsync();
+            var client = new TcpClientConnection(
+                new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = port });
+            Task connect = client.ConnectAsync();
+
+            Socket server = await accept;
+            await ReadFrameAsync(server);
+            server.Dispose();
+
+            await Assert.ThrowsAsync<InvalidDataException>(
+                () => connect.WaitAsync(TimeSpan.FromSeconds(10)));
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task DecoderRejectionDisconnectsTheServerPeer()
+    {
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        var server = new RpcServer(transport, new RpcRegistry());
+        RpcPeer? connected = null;
+        RpcPeer? disconnected = null;
+        var connectedGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var disconnectedGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.ClientConnected += peer =>
+        {
+            connected = peer;
+            connectedGate.TrySetResult();
+        };
+        server.ClientDisconnected += peer =>
+        {
+            disconnected = peer;
+            disconnectedGate.TrySetResult();
+        };
+        server.Start();
+
+        using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        await socket.ConnectAsync(IPAddress.Loopback, transport.Port);
+        await ReadFrameAsync(socket);
+        await SendFrameAsync(socket, new Handshake(1).Serialize());
+        await connectedGate.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // A zero-length frame fails the decoder. The receive loop ends and
+        // fires the disconnect.
+        await socket.SendAsync(new byte[4], SocketFlags.None);
+        await disconnectedGate.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.NotNull(connected);
+        Assert.Same(connected, disconnected);
+        Assert.Null(server.GetPeer(connected.ClientId));
+        server.Close();
+    }
+
+    [Fact]
+    public async Task ClientRejectsFrameAboveTheSendQueueBound()
+    {
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        Task<IServerConnection?> accept = transport.AcceptAsync();
+        var client = new TcpClientConnection(
+            new RpcOptions(),
+            new TcpOptions { Host = "127.0.0.1", Port = transport.Port, SendQueueBytes = 32 });
+        await client.ConnectAsync();
+        await accept;
+
+        var envelope = new Envelope(1, (byte)RpcMessageKind.Notification, 0UL, 1UL, null, null);
+        byte[] frame = new byte[4 + envelope.GetSize()];
+        BinaryPrimitives.WriteInt32LittleEndian(frame, envelope.GetSize());
+        envelope.SerializeInto(frame.AsSpan(4));
+
+        Assert.True(client.TrySend(frame));
+        Assert.False(client.TrySend(new byte[33]));
+    }
+
+    [Fact]
+    public async Task ClientRejectsASecondConnect()
+    {
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        Task<IServerConnection?> accept = transport.AcceptAsync();
+        var client = new TcpClientConnection(
+            new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
+        await client.ConnectAsync();
+        await accept;
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => client.ConnectAsync());
+    }
+
+    [Fact]
+    public async Task ClientRejectsSendAfterTheConnectionCloses()
+    {
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        Task<IServerConnection?> accept = transport.AcceptAsync();
+        var client = new TcpClientConnection(
+            new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
+        var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        client.Disconnected += () => disconnected.TrySetResult();
+        await client.ConnectAsync();
+        await accept;
+
+        transport.Close();
+        await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.False(client.IsConnected);
+        Assert.False(client.TrySend(new byte[4]));
     }
 
     [Fact]
@@ -143,6 +316,24 @@ public sealed class TcpIntegrationTests
         RpcResult<Handshake> result = await call;
         Assert.False(result.IsSuccess);
         Assert.Equal((int)RpcErrorCode.Unavailable, result.ErrorCode);
+    }
+
+    private static async Task<byte[]> ReadFrameAsync(Socket socket)
+    {
+        byte[] header = new byte[4];
+        await ReadExactAsync(socket, header);
+        int length = BinaryPrimitives.ReadInt32LittleEndian(header);
+        byte[] payload = new byte[length];
+        await ReadExactAsync(socket, payload);
+        return payload;
+    }
+
+    private static async Task SendFrameAsync(Socket socket, byte[] payload)
+    {
+        byte[] frame = new byte[4 + payload.Length];
+        BinaryPrimitives.WriteInt32LittleEndian(frame, payload.Length);
+        payload.CopyTo(frame, 4);
+        await socket.SendAsync(frame, SocketFlags.None);
     }
 
     private static async Task ReadExactAsync(Socket socket, byte[] buffer)

@@ -208,6 +208,42 @@ public sealed class RpcRegistryTests
         Assert.Contains("parameterless", exception.Message);
     }
 
+    [Fact]
+    public void AddWithExplicitIdRejectsNullHandler()
+    {
+        var registry = new RpcRegistry();
+
+        Assert.Throws<ArgumentNullException>(
+            () => registry.Add<Handshake, Handshake>(null!, 600UL));
+    }
+
+    [Fact]
+    public void AddWithExplicitIdAfterFreezeThrows()
+    {
+        var registry = new RpcRegistry();
+        registry.Add(new DerivedHandler(), 600UL);
+        registry.Freeze();
+
+        Assert.Throws<InvalidOperationException>(
+            () => registry.Add(new DerivedHandler(), 601UL));
+    }
+
+    [Fact]
+    public void AddServiceRejectsNullService()
+    {
+        var registry = new RpcRegistry();
+
+        Assert.Throws<ArgumentNullException>(() => registry.AddService(null!));
+    }
+
+    [Fact]
+    public void ScanAssemblyRejectsNullAssembly()
+    {
+        var registry = new RpcRegistry();
+
+        Assert.Throws<ArgumentNullException>(() => registry.ScanAssembly(null!));
+    }
+
     // Emits a handler class in a fresh dynamic assembly. The class carries the
     // RpcMethod attribute, implements the handler interface, and throws from
     // ExecuteAsync. The body never runs in these tests.

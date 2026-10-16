@@ -7,6 +7,8 @@ public sealed class RpcPeerTests
 {
     private const ulong EchoMethod = 5;
 
+    private const ulong ProbeMethod = 1000;
+
     private static void Pump(InMemoryConnection from, RpcPeer into)
     {
         while (from.TryDequeueInbound(out byte[] frame))
@@ -467,6 +469,49 @@ public sealed class RpcPeerTests
     }
 
     [Fact]
+    public async Task PeerDropsFrameAboveMaxFrameBytes()
+    {
+        var options = new RpcOptions { MaxFrameBytes = 64 };
+        var peer = new RpcPeer(new InMemoryConnection(), options);
+
+        int calls = await CountDispatchesAfterMalformedInput(peer, state => state.HandleFrame(new byte[65]));
+
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task PeerDropsFrameShorterThanTheLengthPrefix()
+    {
+        var peer = new RpcPeer(new InMemoryConnection());
+
+        int calls = await CountDispatchesAfterMalformedInput(peer, state => state.HandleFrame([1, 2]));
+
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task PeerDropsFrameWithMismatchedLength()
+    {
+        var peer = new RpcPeer(new InMemoryConnection());
+
+        // The prefix claims three bytes. One byte follows.
+        int calls = await CountDispatchesAfterMalformedInput(peer, state => state.HandleFrame([3, 0, 0, 0, 9]));
+
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task PeerDropsUndecodableEnvelope()
+    {
+        var peer = new RpcPeer(new InMemoryConnection());
+
+        // Field id 0 announces a one-byte field value that never arrives.
+        int calls = await CountDispatchesAfterMalformedInput(peer, state => state.HandleFrame([2, 0, 0, 0, 0, 0]));
+
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
     public async Task RequestWithoutIdIsDropped()
     {
         var connection = new InMemoryConnection();
@@ -488,6 +533,286 @@ public sealed class RpcPeerTests
         await gate.Task;
 
         Assert.Equal(1, hookCalls);
+    }
+
+    [Fact]
+    public async Task PeerDropsRequestWithZeroMethod()
+    {
+        var peer = new RpcPeer(new InMemoryConnection());
+
+        int calls = await CountDispatchesAfterMalformedInput(peer, state => RpcTestHelpers.Deliver(
+            state,
+            new Envelope(1, (byte)RpcMessageKind.Request, 1UL, 0UL, null, null)));
+
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task PeerDropsRequestWithError()
+    {
+        var peer = new RpcPeer(new InMemoryConnection());
+        var error = new RpcError((int)RpcErrorCode.InternalError, "nonsense");
+
+        int calls = await CountDispatchesAfterMalformedInput(peer, state => RpcTestHelpers.Deliver(
+            state,
+            new Envelope(1, (byte)RpcMessageKind.Request, 1UL, EchoMethod, null, error)));
+
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task PeerDropsResponseWithMethod()
+    {
+        (InMemoryConnection clientConn, _) = InMemoryConnection.CreatePair();
+        var client = new RpcPeer(clientConn);
+        Task<RpcResult<Handshake>> call = client.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1));
+
+        var response = new Envelope(
+            1, (byte)RpcMessageKind.Response, 1UL, EchoMethod, new Handshake(2).Serialize(), null);
+        RpcTestHelpers.Deliver(client, in response);
+
+        Assert.False(call.IsCompleted);
+    }
+
+    [Fact]
+    public async Task PeerDropsNotificationWithZeroMethod()
+    {
+        var peer = new RpcPeer(new InMemoryConnection());
+
+        int calls = await CountDispatchesAfterMalformedInput(peer, state => RpcTestHelpers.Deliver(
+            state,
+            new Envelope(1, (byte)RpcMessageKind.Notification, 0UL, 0UL, null, null)));
+
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task PeerDropsNotificationWithError()
+    {
+        var peer = new RpcPeer(new InMemoryConnection());
+        var error = new RpcError((int)RpcErrorCode.InternalError, "nonsense");
+
+        int calls = await CountDispatchesAfterMalformedInput(peer, state => RpcTestHelpers.Deliver(
+            state,
+            new Envelope(1, (byte)RpcMessageKind.Notification, 0UL, EchoMethod, null, error)));
+
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task PeerDropsChunkWithoutMethod()
+    {
+        var connection = new InMemoryConnection();
+        var peer = new RpcPeer(connection);
+        var sink = new RecordingSink();
+        Task<RpcResult<Handshake>> call = peer.InvokeStreamAsync<Handshake, Handshake, Handshake>(
+            EchoMethod, new Handshake(1), sink);
+
+        var chunk = new Envelope(
+            1, (byte)RpcMessageKind.Notification, 1UL, 0UL, new Handshake(2).Serialize(), null);
+        RpcTestHelpers.Deliver(peer, in chunk);
+
+        Assert.Empty(sink.Chunks);
+        Assert.False(call.IsCompleted);
+    }
+
+    [Fact]
+    public async Task PeerDropsChunkWithError()
+    {
+        var connection = new InMemoryConnection();
+        var peer = new RpcPeer(connection);
+        var sink = new RecordingSink();
+        Task<RpcResult<Handshake>> call = peer.InvokeStreamAsync<Handshake, Handshake, Handshake>(
+            EchoMethod, new Handshake(1), sink);
+        var error = new RpcError((int)RpcErrorCode.InternalError, "nonsense");
+
+        var chunk = new Envelope(
+            1, (byte)RpcMessageKind.Notification, 1UL, EchoMethod, new Handshake(2).Serialize(), error);
+        RpcTestHelpers.Deliver(peer, in chunk);
+
+        Assert.Empty(sink.Chunks);
+        Assert.False(call.IsCompleted);
+    }
+
+    [Fact]
+    public async Task PeerDropsChunkForNonStreamCall()
+    {
+        (InMemoryConnection clientConn, _) = InMemoryConnection.CreatePair();
+        var client = new RpcPeer(clientConn);
+        Task<RpcResult<Handshake>> call = client.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1));
+
+        var chunk = new Envelope(
+            1, (byte)RpcMessageKind.Notification, 1UL, EchoMethod, new Handshake(2).Serialize(), null);
+        RpcTestHelpers.Deliver(client, in chunk);
+
+        // The call stays pending. A later response still completes it.
+        Assert.False(call.IsCompleted);
+        var response = new Envelope(1, (byte)RpcMessageKind.Response, 1UL, 0UL, new Handshake(3).Serialize(), null);
+        RpcTestHelpers.Deliver(client, in response);
+        RpcResult<Handshake> result = await call;
+        Assert.True(result.IsSuccess);
+        Assert.Equal(3, result.Value.ProtocolVersion);
+    }
+
+    [Fact]
+    public async Task PeerDropsCancellationWithZeroId()
+    {
+        var cancellation = new Envelope(1, (byte)RpcMessageKind.Cancellation, 0UL, 0UL, null, null);
+
+        await AssertCancellationIsDropped(cancellation);
+    }
+
+    [Fact]
+    public async Task PeerDropsCancellationWithMethod()
+    {
+        var cancellation = new Envelope(1, (byte)RpcMessageKind.Cancellation, 1UL, EchoMethod, null, null);
+
+        await AssertCancellationIsDropped(cancellation);
+    }
+
+    [Fact]
+    public async Task PeerDropsCancellationWithPayload()
+    {
+        var cancellation = new Envelope(
+            1, (byte)RpcMessageKind.Cancellation, 1UL, 0UL, new Handshake(2).Serialize(), null);
+
+        await AssertCancellationIsDropped(cancellation);
+    }
+
+    [Fact]
+    public async Task PeerDropsCancellationWithError()
+    {
+        var error = new RpcError((int)RpcErrorCode.InternalError, "nonsense");
+        var cancellation = new Envelope(1, (byte)RpcMessageKind.Cancellation, 1UL, 0UL, null, error);
+
+        await AssertCancellationIsDropped(cancellation);
+    }
+
+    [Fact]
+    public async Task PeerDropsCancellationWithUnknownId()
+    {
+        var cancellation = new Envelope(1, (byte)RpcMessageKind.Cancellation, 2UL, 0UL, null, null);
+
+        await AssertCancellationIsDropped(cancellation);
+    }
+
+    [Fact]
+    public async Task ContextFailSendsErrorResponse()
+    {
+        (_, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var server = new RpcPeer(serverConn);
+        RpcContext captured = await CaptureInboundContextAsync(server);
+
+        captured.Fail(RpcErrorCode.PermissionDenied, "denied");
+
+        Assert.Single(serverConn.SentFrames);
+        Envelope response = Envelope.Deserialize((ReadOnlySpan<byte>)serverConn.SentFrames[0].AsSpan(4));
+        Assert.Equal((byte)RpcMessageKind.Response, response.Kind);
+        Assert.NotNull(response.Error);
+        Assert.Equal((int)RpcErrorCode.PermissionDenied, response.Error.Value.Code);
+        Assert.Equal("denied", response.Error.Value.Message);
+    }
+
+    [Fact]
+    public async Task ContextFailAfterCancellationIsDropped()
+    {
+        (_, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var server = new RpcPeer(serverConn);
+        RpcContext captured = await CaptureInboundContextAsync(server);
+
+        var cancellation = new Envelope(1, (byte)RpcMessageKind.Cancellation, 1UL, 0UL, null, null);
+        RpcTestHelpers.Deliver(server, in cancellation);
+        captured.Fail(RpcErrorCode.PermissionDenied, "denied");
+
+        Assert.Empty(serverConn.SentFrames);
+    }
+
+    [Fact]
+    public async Task ContextFailAfterRespondAsserts()
+    {
+        (_, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var server = new RpcPeer(serverConn);
+        RpcContext captured = await CaptureInboundContextAsync(server);
+        captured.Respond(RpcResult<Handshake>.Success(new Handshake(9)));
+
+        Assert.Throws<InvalidOperationException>(
+            () => captured.Fail(RpcErrorCode.PermissionDenied, "denied"));
+    }
+
+    [Fact]
+    public async Task RespondAfterFaultIsDropped()
+    {
+        (_, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var server = new RpcPeer(serverConn);
+        RpcContext captured = await CaptureInboundContextAsync(server);
+
+        serverConn.Disconnect();
+        captured.Respond(RpcResult<Handshake>.Success(new Handshake(9)));
+
+        Assert.Empty(serverConn.SentFrames);
+    }
+
+    [Fact]
+    public async Task CancelledSinkStreamCompletesWithCancelled()
+    {
+        var connection = new InMemoryConnection();
+        var peer = new RpcPeer(connection);
+        var sink = new RecordingSink();
+        using var cancellation = new CancellationTokenSource();
+
+        Task<RpcResult<Handshake>> call = peer.InvokeStreamAsync<Handshake, Handshake, Handshake>(
+            EchoMethod, new Handshake(1), sink, cancellationToken: cancellation.Token);
+        cancellation.Cancel();
+
+        Assert.Equal((int)RpcErrorCode.Cancelled, (await call).ErrorCode);
+    }
+
+    [Fact]
+    public async Task ResponseWithMalformedPayloadFailsWithInvalidRequest()
+    {
+        (InMemoryConnection clientConn, _) = InMemoryConnection.CreatePair();
+        var client = new RpcPeer(clientConn);
+        Task<RpcResult<Handshake>> call = client.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1));
+
+        var response = new Envelope(1, (byte)RpcMessageKind.Response, 1UL, 0UL, [0, 0], null);
+        RpcTestHelpers.Deliver(client, in response);
+
+        RpcResult<Handshake> result = await call;
+        Assert.False(result.IsSuccess);
+        Assert.Equal((int)RpcErrorCode.InvalidRequest, result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task ResponseWithNullPayloadCompletesWithDefault()
+    {
+        (InMemoryConnection clientConn, _) = InMemoryConnection.CreatePair();
+        var client = new RpcPeer(clientConn);
+        Task<RpcResult<Handshake>> call = client.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1));
+
+        var response = new Envelope(1, (byte)RpcMessageKind.Response, 1UL, 0UL, null, null);
+        RpcTestHelpers.Deliver(client, in response);
+
+        RpcResult<Handshake> result = await call;
+        Assert.True(result.IsSuccess);
+        Assert.Equal(0, result.Value.ProtocolVersion);
+    }
+
+    [Fact]
+    public async Task ChunkWithMalformedPayloadFailsWithInvalidRequest()
+    {
+        (InMemoryConnection clientConn, _) = InMemoryConnection.CreatePair();
+        var client = new RpcPeer(clientConn);
+        var sink = new RecordingSink();
+        Task<RpcResult<Handshake>> call = client.InvokeStreamAsync<Handshake, Handshake, Handshake>(
+            EchoMethod, new Handshake(1), sink);
+
+        var chunk = new Envelope(
+            1, (byte)RpcMessageKind.Notification, 1UL, EchoMethod, [0, 0], null);
+        RpcTestHelpers.Deliver(client, in chunk);
+
+        RpcResult<Handshake> result = await call;
+        Assert.Equal((int)RpcErrorCode.InvalidRequest, result.ErrorCode);
+        Assert.Empty(sink.Chunks);
     }
 
     [Fact]
@@ -634,6 +959,22 @@ public sealed class RpcPeerTests
     }
 
     [Fact]
+    public void NotifyWithoutPayloadSendsStandaloneNotification()
+    {
+        var connection = new InMemoryConnection();
+        var peer = new RpcPeer(connection);
+
+        bool sent = peer.Notify(EchoMethod);
+
+        Assert.True(sent);
+        Envelope frame = DecodeFrames(connection.SentFrames)[0];
+        Assert.Equal((byte)RpcMessageKind.Notification, frame.Kind);
+        Assert.Equal(0UL, frame.Id);
+        Assert.Equal(EchoMethod, frame.Method);
+        Assert.Null(frame.Payload);
+    }
+
+    [Fact]
     public async Task DuplicateRequestIdIsDropped()
     {
         (InMemoryConnection clientConn, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
@@ -741,6 +1082,207 @@ public sealed class RpcPeerTests
         Assert.Throws<ArgumentOutOfRangeException>(
             () => new RpcPeer(connection, new RpcOptions { Timeout = TimeSpan.FromSeconds(-1) }));
         Assert.Throws<ArgumentNullException>(() => new RpcPeer(null!));
+    }
+
+    [Fact]
+    public async Task InvokeStreamAsyncRejectsMethodZero()
+    {
+        var peer = new RpcPeer(new InMemoryConnection());
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => peer.InvokeStreamAsync<Handshake, Handshake, Handshake>(
+                0, new Handshake(1), new RecordingSink()));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => peer.InvokeStreamAsync<Handshake, Handshake, Handshake>(0, new Handshake(1)));
+    }
+
+    [Fact]
+    public async Task InvokeStreamAsyncRejectsNullSink()
+    {
+        var peer = new RpcPeer(new InMemoryConnection());
+
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => peer.InvokeStreamAsync<Handshake, Handshake, Handshake>(
+                EchoMethod, new Handshake(1), (IChunkSink<Handshake>)null!));
+    }
+
+    [Fact]
+    public async Task OversizedRequestFrameFailsEveryInvokeOverload()
+    {
+        var options = new RpcOptions { MaxFrameBytes = 1 };
+        var connection = new InMemoryConnection();
+        var peer = new RpcPeer(connection, options);
+
+        RpcResult<Handshake> call = await peer.InvokeAsync<Handshake, Handshake>(
+            EchoMethod, new Handshake(1));
+        RpcResult<Handshake> sinkStream = await peer.InvokeStreamAsync<Handshake, Handshake, Handshake>(
+            EchoMethod, new Handshake(1), new RecordingSink());
+        RpcStreamSession<Handshake, Handshake> session =
+            peer.InvokeStreamAsync<Handshake, Handshake, Handshake>(EchoMethod, new Handshake(1));
+
+        Assert.Equal((int)RpcErrorCode.InvalidRequest, call.ErrorCode);
+        Assert.Equal((int)RpcErrorCode.InvalidRequest, sinkStream.ErrorCode);
+        Assert.Equal((int)RpcErrorCode.InvalidRequest, (await session.Response).ErrorCode);
+        Assert.Empty(connection.SentFrames);
+    }
+
+    [Fact]
+    public async Task StreamInvokesAfterFaultFailWithUnavailable()
+    {
+        var connection = new InMemoryConnection();
+        var peer = new RpcPeer(connection);
+        connection.Disconnect();
+
+        RpcResult<Handshake> sinkStream = await peer.InvokeStreamAsync<Handshake, Handshake, Handshake>(
+            EchoMethod, new Handshake(1), new RecordingSink());
+        RpcStreamSession<Handshake, Handshake> session =
+            peer.InvokeStreamAsync<Handshake, Handshake, Handshake>(EchoMethod, new Handshake(1));
+
+        Assert.Equal((int)RpcErrorCode.Unavailable, sinkStream.ErrorCode);
+        Assert.Equal((int)RpcErrorCode.Unavailable, (await session.Response).ErrorCode);
+    }
+
+    [Fact]
+    public async Task ZeroTimeoutStreamReceivesChunksAndStaysAlive()
+    {
+        long now = 0;
+        var options = new RpcOptions { TimestampNanos = () => now };
+        var connection = new InMemoryConnection();
+        var peer = new RpcPeer(connection, options);
+        var sink = new RecordingSink();
+        Task<RpcResult<Handshake>> call = peer.InvokeStreamAsync<Handshake, Handshake, Handshake>(
+            EchoMethod, new Handshake(1), sink, TimeSpan.Zero);
+
+        now = 100_000_000_000;
+        var chunk = new Envelope(
+            1, (byte)RpcMessageKind.Notification, 1UL, EchoMethod, new Handshake(2).Serialize(), null);
+        RpcTestHelpers.Deliver(peer, in chunk);
+        peer.CheckTimeouts(now);
+
+        Assert.Single(sink.Chunks);
+        Assert.False(call.IsCompleted);
+    }
+
+    [Fact]
+    public async Task InvokeAsyncRejectsTimeoutAboveTheSupportedRange()
+    {
+        var peer = new RpcPeer(new InMemoryConnection());
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => peer.InvokeAsync<Handshake, Handshake>(
+                EchoMethod, new Handshake(1), TimeSpan.MaxValue));
+    }
+
+    [Fact]
+    public async Task DeadlineOverflowDisablesTheTimeout()
+    {
+        long now = long.MaxValue - 100;
+        var options = new RpcOptions { TimestampNanos = () => now };
+        var peer = new RpcPeer(new InMemoryConnection(), options);
+
+        Task<RpcResult<Handshake>> call = peer.InvokeAsync<Handshake, Handshake>(
+            EchoMethod, new Handshake(1), TimeSpan.FromSeconds(5));
+        peer.CheckTimeouts(long.MaxValue - 1);
+
+        Assert.False(call.IsCompleted);
+    }
+
+    [Fact]
+    public async Task PeerWithoutDispatchHookAnswersMethodNotFound()
+    {
+        (InMemoryConnection clientConn, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var client = new RpcPeer(clientConn);
+        var server = new RpcPeer(serverConn);
+        var delivered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        clientConn.FrameDelivered += () => delivered.TrySetResult();
+
+        Task<RpcResult<Handshake>> call = client.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1));
+        Pump(serverConn, server);
+        await delivered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Pump(clientConn, client);
+
+        RpcResult<Handshake> result = await call;
+        Assert.False(result.IsSuccess);
+        Assert.Equal((int)RpcErrorCode.MethodNotFound, result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task PeerAnswersInternalErrorWhenTheDispatchHookThrows()
+    {
+        (InMemoryConnection clientConn, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var client = new RpcPeer(clientConn);
+        var server = new RpcPeer(serverConn);
+        var delivered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        clientConn.FrameDelivered += () => delivered.TrySetResult();
+        server.DispatchHook = (context, payload) => throw new InvalidOperationException("boom");
+
+        Task<RpcResult<Handshake>> call = client.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1));
+        Pump(serverConn, server);
+        await delivered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Pump(clientConn, client);
+
+        RpcResult<Handshake> result = await call;
+        Assert.Equal((int)RpcErrorCode.InternalError, result.ErrorCode);
+    }
+
+    // Delivers malformed input, then a probe notification. Dispatch is serial,
+    // so the probe is dispatched only after any wrongly accepted input. The
+    // call count is one when the input was dropped.
+    private static async Task<int> CountDispatchesAfterMalformedInput(
+        RpcPeer peer, Action<RpcPeer> deliverMalformedInput)
+    {
+        int calls = 0;
+        var probeGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.DispatchHook = (context, payload) =>
+        {
+            calls++;
+            if (context.Method == ProbeMethod)
+            {
+                probeGate.TrySetResult();
+            }
+
+            return default;
+        };
+
+        deliverMalformedInput(peer);
+        var probe = new Envelope(1, (byte)RpcMessageKind.Notification, 0UL, ProbeMethod, null, null);
+        RpcTestHelpers.Deliver(peer, in probe);
+        await probeGate.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        return calls;
+    }
+
+    // Delivers a request and returns the captured context. The caller answers it.
+    private static async Task<RpcContext> CaptureInboundContextAsync(RpcPeer server)
+    {
+        RpcContext captured = default;
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.DispatchHook = (context, payload) =>
+        {
+            captured = context;
+            gate.TrySetResult();
+            return default;
+        };
+
+        var request = new Envelope(1, (byte)RpcMessageKind.Request, 1UL, EchoMethod, null, null);
+        RpcTestHelpers.Deliver(server, in request);
+        await gate.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        return captured;
+    }
+
+    // Delivers a request, then the cancellation, then a response. An invalid
+    // cancellation must leave the request claimable, so the response arrives.
+    private static async Task AssertCancellationIsDropped(Envelope cancellation)
+    {
+        (_, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var server = new RpcPeer(serverConn);
+        RpcContext captured = await CaptureInboundContextAsync(server);
+
+        RpcTestHelpers.Deliver(server, in cancellation);
+        captured.Respond(RpcResult<Handshake>.Success(new Handshake(9)));
+
+        Assert.Single(serverConn.SentFrames);
+        Envelope response = Envelope.Deserialize((ReadOnlySpan<byte>)serverConn.SentFrames[0].AsSpan(4));
+        Assert.Equal((byte)RpcMessageKind.Response, response.Kind);
     }
 
     private sealed class RecordingSink : IChunkSink<Handshake>

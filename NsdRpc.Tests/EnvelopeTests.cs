@@ -114,8 +114,8 @@ public sealed class EnvelopeTests
         var envelope = new Envelope(1, (byte)RpcMessageKind.Request, 9UL, 3UL, [7], null);
         byte[] bytes = envelope.Serialize();
 
-        // Append an unknown field: id 9, a 4-byte value. Unknown fields only
-        // appear after every known field, because new fields get new ids.
+        // Append an unknown field: id 9 and a value. The reader scans trailing
+        // bytes pairwise. The known fields must survive the scan.
         byte[] withUnknown = new byte[bytes.Length + 6];
         bytes.CopyTo(withUnknown, 0);
         withUnknown[bytes.Length] = 9;

@@ -30,6 +30,29 @@ public sealed class RpcClientTests
         }
     }
 
+    [RpcMethod(203)]
+    private sealed class StreamingHandler : IRpcHandler<Handshake, Handshake>
+    {
+        public ValueTask<RpcResult<Handshake>> ExecuteAsync(
+            Handshake request, RpcContext context, CancellationToken cancellationToken)
+        {
+            context.Stream(new Handshake(10));
+            context.Stream(new Handshake(20));
+            context.Respond(RpcResult<Handshake>.Success(new Handshake(30)));
+            return new ValueTask<RpcResult<Handshake>>(RpcResult<Handshake>.Success(default));
+        }
+    }
+
+    private sealed class RecordingSink : IChunkSink<Handshake>
+    {
+        public List<Handshake> Chunks { get; } = [];
+
+        public void OnChunk(in Handshake chunk)
+        {
+            Chunks.Add(chunk);
+        }
+    }
+
     [Fact]
     public async Task RpcClientInvokeRoundsTrip()
     {
@@ -72,6 +95,7 @@ public sealed class RpcClientTests
         Assert.Equal(15, result.Value.ProtocolVersion);
         Assert.Equal(0UL, handler.Captured.ClientId);
         Assert.False(handler.Captured.IsServer);
+        Assert.Same(clientConn, handler.Captured.Connection);
     }
 
     [Fact]
@@ -110,5 +134,88 @@ public sealed class RpcClientTests
     {
         Assert.Throws<ArgumentNullException>(() => new RpcClient(null!, new RpcRegistry()));
         Assert.Throws<ArgumentNullException>(() => new RpcClient(new InMemoryConnection(), null!));
+    }
+
+    [Fact]
+    public async Task RpcClientStreamSessionRoundsTrip()
+    {
+        var serverRegistry = new RpcRegistry();
+        serverRegistry.Add(new StreamingHandler());
+        (InMemoryConnection clientConn, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var client = new RpcClient(clientConn, new RpcRegistry());
+        var server = new RpcPeer(serverConn);
+        TaskCompletionSource gate = RpcTestHelpers.AttachDispatcher(server, serverRegistry);
+
+        RpcStreamSession<Handshake, Handshake> session =
+            client.InvokeStreamAsync<Handshake, Handshake, Handshake>(203, new Handshake(1));
+        RpcTestHelpers.Pump(serverConn, server);
+        await gate.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        RpcTestHelpers.Pump(clientConn, client);
+
+        var received = new List<Handshake>();
+        await foreach (Handshake chunk in session.Chunks)
+        {
+            received.Add(chunk);
+        }
+
+        RpcResult<Handshake> result = await session.Response;
+        Assert.True(result.IsSuccess);
+        Assert.Equal(30, result.Value.ProtocolVersion);
+        Assert.Equal([10, 20], received.Select(chunk => chunk.ProtocolVersion).ToArray());
+    }
+
+    [Fact]
+    public async Task RpcClientSinkStreamRoundsTrip()
+    {
+        var serverRegistry = new RpcRegistry();
+        serverRegistry.Add(new StreamingHandler());
+        (InMemoryConnection clientConn, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var client = new RpcClient(clientConn, new RpcRegistry());
+        var server = new RpcPeer(serverConn);
+        TaskCompletionSource gate = RpcTestHelpers.AttachDispatcher(server, serverRegistry);
+        var sink = new RecordingSink();
+
+        Task<RpcResult<Handshake>> call = client.InvokeStreamAsync<Handshake, Handshake, Handshake>(
+            203, new Handshake(1), sink);
+        RpcTestHelpers.Pump(serverConn, server);
+        await gate.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        RpcTestHelpers.Pump(clientConn, client);
+
+        RpcResult<Handshake> result = await call;
+        Assert.True(result.IsSuccess);
+        Assert.Equal(30, result.Value.ProtocolVersion);
+        Assert.Equal([10, 20], sink.Chunks.Select(chunk => chunk.ProtocolVersion).ToArray());
+    }
+
+    [Fact]
+    public void RpcClientNotifyWithoutPayloadForwards()
+    {
+        (InMemoryConnection clientConn, _) = InMemoryConnection.CreatePair();
+        var client = new RpcClient(clientConn, new RpcRegistry());
+
+        bool sent = client.Notify(200);
+
+        Assert.True(sent);
+        Envelope frame = Envelope.Deserialize((ReadOnlySpan<byte>)clientConn.SentFrames[0].AsSpan(4));
+        Assert.Equal((byte)RpcMessageKind.Notification, frame.Kind);
+        Assert.Equal(200UL, frame.Method);
+        Assert.Null(frame.Payload);
+    }
+
+    [Fact]
+    public async Task RpcClientCheckTimeoutsForwards()
+    {
+        long now = 0;
+        var options = new RpcOptions { TimestampNanos = () => now };
+        (InMemoryConnection clientConn, _) = InMemoryConnection.CreatePair();
+        var client = new RpcClient(clientConn, new RpcRegistry(), options);
+
+        Task<RpcResult<Handshake>> call = client.InvokeAsync<Handshake, Handshake>(
+            200, new Handshake(1), TimeSpan.FromSeconds(5));
+
+        now = 5_000_000_000;
+        client.CheckTimeouts(now);
+
+        Assert.Equal((int)RpcErrorCode.RequestTimeout, (await call).ErrorCode);
     }
 }

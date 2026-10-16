@@ -193,6 +193,38 @@ public sealed class RpcServerTests
     }
 
     [Fact]
+    public async Task ServerCloseStopsAcceptingNewConnections()
+    {
+        var registry = new RpcRegistry();
+        (_, InMemoryConnection innerA) = InMemoryConnection.CreatePair();
+        (_, InMemoryConnection innerB) = InMemoryConnection.CreatePair();
+        var transport = new FakeServerTransport();
+        transport.Enqueue(new InMemoryServerConnection(innerA, 1));
+        var server = new RpcServer(transport, registry);
+        int connectedCount = 0;
+        var firstConnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.ClientConnected += peer =>
+        {
+            if (Interlocked.Increment(ref connectedCount) == 1)
+            {
+                firstConnected.TrySetResult();
+            }
+        };
+
+        server.Start();
+        await firstConnected.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        server.Close();
+
+        // The accept loop has stopped. A connection enqueued after Close is
+        // never handed out and never becomes a peer.
+        transport.Enqueue(new InMemoryServerConnection(innerB, 2));
+
+        Assert.Equal(1, transport.AcceptedCount);
+        Assert.Equal(1, connectedCount);
+        Assert.Null(server.GetPeer(2));
+    }
+
+    [Fact]
     public async Task ServerPollChecksTimeouts()
     {
         long now = 0;
@@ -211,6 +243,19 @@ public sealed class RpcServerTests
     }
 
     [Fact]
+    public async Task ServerSurvivesATransportFailure()
+    {
+        var transport = new ThrowingServerTransport();
+        var server = new RpcServer(transport, new RpcRegistry());
+        server.Start();
+        await transport.Attempted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        server.Close();
+
+        Assert.Null(server.GetPeer(1));
+    }
+
+    [Fact]
     public void ServerRejectsNullArgumentsAndDoubleStart()
     {
         var transport = new FakeServerTransport();
@@ -221,5 +266,22 @@ public sealed class RpcServerTests
         var server = new RpcServer(transport, new RpcRegistry());
         server.Start();
         Assert.Throws<InvalidOperationException>(() => server.Start());
+    }
+
+    // A listener whose accept always fails. The accept loop logs the failure
+    // and stops. The failure must not reach the caller.
+    private sealed class ThrowingServerTransport : IRpcServerTransport
+    {
+        public TaskCompletionSource Attempted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public Task<IServerConnection?> AcceptAsync()
+        {
+            Attempted.TrySetResult();
+            return Task.FromException<IServerConnection?>(new InvalidOperationException("accept failed"));
+        }
+
+        public void Close()
+        {
+        }
     }
 }

@@ -308,23 +308,41 @@ public sealed class RpcDispatcherTests
     }
 
     [Fact]
-    public async Task SyncHandlerExecuteAllocatesNothing()
+    public async Task NotificationWithoutHandlerSendsNoResponse()
     {
-        var handler = new EchoHandler();
-        var context = default(RpcContext);
-        var request = new Handshake(5);
+        var registry = new RpcRegistry();
+        registry.Add(new EchoHandler());
+        (InMemoryConnection clientConn, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var client = new RpcPeer(clientConn);
+        var server = new RpcPeer(serverConn);
+        TaskCompletionSource gate = RpcTestHelpers.AttachDispatcher(server, registry);
 
-        // Warm up so first-call JIT work does not count.
-        _ = handler.ExecuteAsync(request, context, CancellationToken.None);
+        var notification = new Envelope(1, (byte)RpcMessageKind.Notification, 0UL, 99UL, null, null);
+        RpcTestHelpers.Deliver(server, in notification);
+        await gate.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
-        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
-        ValueTask<RpcResult<Handshake>> task = handler.ExecuteAsync(
-            request, context, CancellationToken.None);
-        long allocatedAfter = GC.GetAllocatedBytesForCurrentThread();
+        Assert.Empty(serverConn.SentFrames);
 
-        Assert.True(task.IsCompletedSuccessfully);
-        RpcResult<Handshake> result = await task;
-        Assert.Equal(6, result.Value.ProtocolVersion);
-        Assert.Equal(allocatedBefore, allocatedAfter);
+        TaskCompletionSource secondGate = RpcTestHelpers.AttachDispatcher(server, registry);
+        RpcResult<Handshake> result = await RpcTestHelpers.RoundTrip(
+            clientConn, serverConn, client, server, secondGate, 5, new Handshake(1));
+        Assert.True(result.IsSuccess);
+    }
+
+    [Fact]
+    public async Task NotificationHandlerExceptionSendsNoResponse()
+    {
+        var registry = new RpcRegistry();
+        registry.Add(new ThrowingHandler());
+        (InMemoryConnection clientConn, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var client = new RpcPeer(clientConn);
+        var server = new RpcPeer(serverConn);
+        TaskCompletionSource gate = RpcTestHelpers.AttachDispatcher(server, registry);
+
+        var notification = new Envelope(1, (byte)RpcMessageKind.Notification, 0UL, 6UL, null, null);
+        RpcTestHelpers.Deliver(server, in notification);
+        await gate.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Empty(serverConn.SentFrames);
     }
 }

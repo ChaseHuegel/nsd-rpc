@@ -211,6 +211,46 @@ public sealed class RpcStreamingTests
         Assert.Equal(2, sink.Chunks.Count);
     }
 
+    [Fact]
+    public async Task ConsumerWaitingForChunksReceivesThemInOrder()
+    {
+        var registry = new RpcRegistry();
+        var handler = new StreamingHandler();
+        handler.Chunks.AddRange([new Handshake(10), new Handshake(20)]);
+        registry.Add(handler);
+        (InMemoryConnection clientConn, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var client = new RpcPeer(clientConn);
+        var server = new RpcPeer(serverConn);
+        TaskCompletionSource gate = RpcTestHelpers.AttachDispatcher(server, registry);
+
+        RpcStreamSession<Handshake, Handshake> session = client.InvokeStreamAsync<Handshake, Handshake, Handshake>(
+            400, new Handshake(1));
+
+        // The consumer parks on an empty queue before any chunk arrives.
+        Task<List<Handshake>> received = ConsumeAsync(session.Chunks);
+
+        RpcTestHelpers.Pump(serverConn, server);
+        await gate.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        RpcTestHelpers.Pump(clientConn, client);
+
+        RpcResult<Handshake> result = await session.Response;
+        List<Handshake> chunks = await received.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(result.IsSuccess);
+        Assert.Equal(40, result.Value.ProtocolVersion);
+        Assert.Equal([10, 20], chunks.Select(chunk => chunk.ProtocolVersion).ToArray());
+    }
+
+    private static async Task<List<Handshake>> ConsumeAsync(IAsyncEnumerable<Handshake> chunks)
+    {
+        var received = new List<Handshake>();
+        await foreach (Handshake chunk in chunks)
+        {
+            received.Add(chunk);
+        }
+
+        return received;
+    }
+
     private sealed class RecordingSink : IChunkSink<Handshake>
     {
         public List<Handshake> Chunks { get; } = [];

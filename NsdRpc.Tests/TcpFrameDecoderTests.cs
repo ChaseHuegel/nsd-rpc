@@ -110,6 +110,24 @@ public sealed class TcpFrameDecoderTests
     }
 
     [Fact]
+    public void DecoderGrowsTheBufferForAFrameAboveFourKilobytes()
+    {
+        var decoder = new TcpFrameDecoder(16384);
+        List<byte[]> frames = [];
+        byte[] payload = new byte[5000];
+        payload[0] = 7;
+        payload[^1] = 9;
+        byte[] stream = Frame(payload);
+
+        bool first = decoder.TryPush(stream.AsSpan(0, 3), span => frames.Add(span.ToArray()));
+        bool second = decoder.TryPush(stream.AsSpan(3), span => frames.Add(span.ToArray()));
+
+        Assert.True(first);
+        Assert.True(second);
+        AssertFrames(frames, payload);
+    }
+
+    [Fact]
     public void DecoderFuzzNeverThrows()
     {
         var decoder = new TcpFrameDecoder(64);

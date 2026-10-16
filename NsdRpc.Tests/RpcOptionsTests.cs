@@ -17,17 +17,6 @@ public sealed class RpcOptionsTests
     }
 
     [Fact]
-    public void RpcOptionsDefaultInstanceHasTheSameDefaults()
-    {
-        RpcOptions defaults = RpcOptions.Default;
-
-        Assert.Equal(TimeSpan.FromMilliseconds(30000), defaults.Timeout);
-        Assert.Equal(65536, defaults.MaxFrameBytes);
-        Assert.Equal(1024, defaults.MaxPendingCalls);
-        Assert.Equal(1024, defaults.MaxBufferedChunks);
-    }
-
-    [Fact]
     public void RpcOptionsDefaultClockIsMonotonic()
     {
         var options = new RpcOptions();
