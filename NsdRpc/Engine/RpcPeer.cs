@@ -23,6 +23,8 @@ public sealed class RpcPeer : IRpcHost
     private readonly object _pendingLock = new();
     private readonly Dictionary<ulong, PendingCallBase> _pending = new();
     private PendingCallBase[]? _expiredScratch;
+    private long _earliestDeadlineNanos = long.MaxValue;
+    private volatile bool _deadlinesDirty;
     private ulong _nextId = 1;
     private bool _idOverflowed;
 
@@ -73,6 +75,10 @@ public sealed class RpcPeer : IRpcHost
             }
         }
     }
+
+    // The number of full pending-table scans. Tests use it to prove that a
+    // poll below the deadline watermark skips the scan.
+    internal long TimeoutScanCount { get; private set; }
 
     internal RpcDispatchHook? DispatchHook
     {
@@ -348,7 +354,14 @@ public sealed class RpcPeer : IRpcHost
 
     public void CheckTimeouts(long timestampNanos)
     {
+        // Skip the scan when nothing changed and no deadline has passed.
+        if (!_deadlinesDirty && timestampNanos < _earliestDeadlineNanos)
+        {
+            return;
+        }
+
         int count = 0;
+        long earliest = long.MaxValue;
         PendingCallBase[] scratch;
         lock (_pendingLock)
         {
@@ -357,13 +370,18 @@ public sealed class RpcPeer : IRpcHost
             scratch = _expiredScratch ??= new PendingCallBase[_options.MaxPendingCalls];
             foreach (KeyValuePair<ulong, PendingCallBase> pair in _pending)
             {
-                if (pair.Value.DeadlineNanos > timestampNanos)
+                PendingCallBase pending = pair.Value;
+                if (pending.DeadlineNanos <= timestampNanos)
                 {
+                    scratch[count] = pending;
+                    count++;
                     continue;
                 }
 
-                scratch[count] = pair.Value;
-                count++;
+                if (pending.DeadlineNanos < earliest)
+                {
+                    earliest = pending.DeadlineNanos;
+                }
             }
 
             Invariant.That(count <= _options.MaxPendingCalls, "The pending table exceeds its bound.");
@@ -372,7 +390,12 @@ public sealed class RpcPeer : IRpcHost
             {
                 _pending.Remove(scratch[i].Id);
             }
+
+            _earliestDeadlineNanos = earliest;
+            _deadlinesDirty = false;
         }
+
+        TimeoutScanCount++;
 
         for (int i = 0; i < count; i++)
         {
@@ -403,6 +426,8 @@ public sealed class RpcPeer : IRpcHost
             }
 
             _pending.Clear();
+            _earliestDeadlineNanos = long.MaxValue;
+            _deadlinesDirty = false;
         }
 
         List<CancellationTokenSource>? sources = null;
@@ -563,6 +588,7 @@ public sealed class RpcPeer : IRpcHost
             if (_pending.TryGetValue(id, out pending))
             {
                 _pending.Remove(id);
+                _deadlinesDirty = true;
             }
         }
 
@@ -648,6 +674,7 @@ public sealed class RpcPeer : IRpcHost
 
             pending.Id = id;
             _pending.Add(id, pending);
+            _deadlinesDirty = true;
             rejectCode = 0;
             rejectMessage = string.Empty;
             return true;
@@ -664,6 +691,8 @@ public sealed class RpcPeer : IRpcHost
             {
                 return;
             }
+
+            _deadlinesDirty = true;
         }
 
         pending.DisposeRegistration();
@@ -843,6 +872,8 @@ public sealed class RpcPeer : IRpcHost
             {
                 return;
             }
+
+            _deadlinesDirty = true;
         }
 
         pending.DisposeRegistration();
@@ -857,6 +888,7 @@ public sealed class RpcPeer : IRpcHost
             if (_pending.TryGetValue(id, out removed))
             {
                 _pending.Remove(id);
+                _deadlinesDirty = true;
             }
         }
 
@@ -946,6 +978,7 @@ public sealed class RpcPeer : IRpcHost
             }
 
             _pending.Remove(envelope.Id);
+            _deadlinesDirty = true;
         }
 
         pending.DisposeRegistration();
@@ -1050,6 +1083,7 @@ public sealed class RpcPeer : IRpcHost
             if (_pending.TryGetValue(envelope.Id, out pending))
             {
                 pending.DeadlineNanos = ResetDeadline(pending.TimeoutNanos, now);
+                _deadlinesDirty = true;
             }
         }
     }

@@ -1,7 +1,7 @@
 # Improvement: Skip timeout scans with a per-peer deadline watermark
 
 - Type: improvement
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -18,9 +18,17 @@ per poll. Most polls expire nothing.
 
 ## Acceptance criteria
 
-- [ ] `RpcPeer` tracks the earliest deadline in the pending table, or an equivalent watermark.
-- [ ] `CheckTimeouts` returns before it takes `_pendingLock` when the timestamp is below the watermark.
-- [ ] A call add, a call remove, and a chunk deadline reset update the watermark.
-- [ ] A test proves a poll below the watermark skips the table scan. Add an internal observable if needed. The test states what it measures.
-- [ ] A test proves each deadline transition still expires at the exact timestamp. The fake clock from the current timeout tests covers it.
-- [ ] The timeout and fault tests pass unchanged.
+- [x] `RpcPeer` tracks the earliest deadline in the pending table, or an equivalent watermark.
+- [x] `CheckTimeouts` returns before it takes `_pendingLock` when the timestamp is below the watermark.
+- [x] A call add, a call remove, and a chunk deadline reset update the watermark.
+- [x] A test proves a poll below the watermark skips the table scan. Add an internal observable if needed. The test states what it measures.
+- [x] A test proves each deadline transition still expires at the exact timestamp. The fake clock from the current timeout tests covers it.
+- [x] The timeout and fault tests pass unchanged.
+
+## Resolution
+
+`CheckTimeouts` returns before the lock when the timestamp is below
+`_earliestDeadlineNanos` and no change is pending. Every add, remove, and
+chunk deadline reset sets `_deadlinesDirty`. A scan recomputes the earliest
+deadline from the entries that remain. `TimeoutScanCount` lets the test prove
+that a poll below the watermark does not scan.

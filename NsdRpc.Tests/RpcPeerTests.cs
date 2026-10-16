@@ -570,6 +570,23 @@ public sealed class RpcPeerTests
     }
 
     [Fact]
+    public void PollBelowTheWatermarkSkipsTheScan()
+    {
+        long now = 0;
+        var options = new RpcOptions { TimestampNanos = () => now };
+        var peer = new RpcPeer(new InMemoryConnection(), options);
+        _ = peer.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1), TimeSpan.FromSeconds(10));
+
+        // The first poll scans and sets the watermark.
+        peer.CheckTimeouts(0);
+        long scans = peer.TimeoutScanCount;
+
+        peer.CheckTimeouts(0);
+
+        Assert.Equal(scans, peer.TimeoutScanCount);
+    }
+
+    [Fact]
     public void PeerConstructionDoesNotAllocateTheTimeoutScratch()
     {
         // The default MaxPendingCalls is 1024, so the scratch would add 8 KB.
