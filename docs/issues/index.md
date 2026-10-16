@@ -39,13 +39,23 @@ add or work an issue.
 
 ### Bug
 
-<!-- - [ ] [Title](/docs/issues/0000-slug.md) — one-line summary -->
+- [ ] [TcpServerTransport leaks accepted connections](/docs/issues/0031-tcp-accepted-connection-leak.md) — a disconnected client stays in the accepted list.
+- [ ] [Frame decoder rejects valid data near the frame cap](/docs/issues/0032-frame-decoder-false-rejection.md) — a read that spans a frame boundary kills the connection.
+- [ ] [The TCP accept loop stalls on a silent client](/docs/issues/0033-tcp-handshake-accept-stall.md) — handshakes run serially and have no deadline.
 
 ### Improvement
 
 - [x] [Notification shape in the RpcService generator](/docs/issues/0016-generator-notification-shape.md) — generated `void NotifyX(TRequest)` methods for one-way messages.
 - [ ] [IRpcHost and the server broadcast call surface](/docs/issues/0020-rpc-host-broadcast.md) — one endpoint interface over `RpcClient`, `RpcPeer`, and `RpcServer`.
+- [ ] [Cache the TCP frame delegate on the connection](/docs/issues/0022-cache-tcp-frame-delegate.md) — the receive loop allocates a delegate per socket read.
+- [ ] [Read the frozen handler registry without a lock](/docs/issues/0023-lock-free-frozen-registry.md) — every dispatch takes the registry lock.
+- [ ] [Remove the extra copy on the TCP send path](/docs/issues/0024-tcp-send-copy-elimination.md) — `TrySend` copies each frame into a fresh array.
+- [ ] [Avoid the linked cancellation source per dispatch](/docs/issues/0025-dispatch-cancellation-token-source.md) — each inbound request allocates a linked token graph.
+- [ ] [Reuse locks and payload sizes in call setup](/docs/issues/0026-call-setup-lock-and-size-reuse.md) — call setup takes the pending lock three times.
+- [ ] [Generated codecs copy payloads byte by byte](/docs/issues/0027-generated-payload-memcpy.md) — an upstream needlefish defect.
+- [ ] [Allocate the peer timeout scratch lazily](/docs/issues/0028-lazy-peer-timeout-scratch.md) — each idle peer holds 8 kilobytes it never uses.
+- [ ] [Prove hot-path allocations with real payloads](/docs/issues/0029-hot-path-allocation-tests.md) — the current tests hide the codec allocation.
 
 ### Research
 
-<!-- - [ ] [Title](/docs/issues/0000-slug.md) — one-line summary -->
+- [ ] [Allocation-free payload path](/docs/issues/0030-allocation-free-payload-path.md) — can the per-message payload array go away?
