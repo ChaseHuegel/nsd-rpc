@@ -48,6 +48,8 @@ add or work an issue.
 - [ ] [A chunk for a non-stream call resets its deadline](/docs/issues/0037-non-stream-chunk-deadline-reset.md) — a dropped chunk extends the timeout.
 - [ ] [A malformed chunk completes the call and keeps the pending entry](/docs/issues/0038-malformed-chunk-pending-entry.md) — the slot leaks until a response or a timeout.
 - [ ] [default(RpcResult<T>).ErrorMessage is null](/docs/issues/0039-default-result-error-message.md) — the annotation says non-null.
+- [ ] [The TCP send loop drops the remainder of a partial send](/docs/issues/0040-tcp-partial-send.md) — a stream send can complete partly and the frame is truncated.
+- [ ] [A notification flood grows the dispatch queue without a bound](/docs/issues/0041-notification-queue-bound.md) — notifications bypass the inbound cap and pin payload arrays.
 
 ### Improvement
 
@@ -61,7 +63,12 @@ add or work an issue.
 - [ ] [Generated codecs copy payloads byte by byte](/docs/issues/0027-generated-payload-memcpy.md) — an upstream needlefish defect.
 - [ ] [Allocate the peer timeout scratch lazily](/docs/issues/0028-lazy-peer-timeout-scratch.md) — each idle peer holds 8 kilobytes it never uses.
 - [ ] [Prove hot-path allocations with real payloads](/docs/issues/0029-hot-path-allocation-tests.md) — the current tests hide the codec allocation.
+- [ ] [Skip timeout scans with a per-peer deadline watermark](/docs/issues/0043-timeout-scan-watermark.md) — a poll rescans every pending call of every peer.
+- [ ] [Cache the call-cancelled delegate in RpcPeer](/docs/issues/0044-cached-cancel-delegate.md) — the instance method group allocates per call.
+- [ ] [Build no drop string while the trace switch is off](/docs/issues/0045-trace-switch-guard.md) — drops allocate a string although the default switch blocks the event.
+- [ ] [Reuse the stream consumer signal instead of a TCS per park](/docs/issues/0046-stream-wait-signal-reuse.md) — a drained queue allocates one signal per wait.
 
 ### Research
 
 - [ ] [Allocation-free payload path](/docs/issues/0030-allocation-free-payload-path.md) — can the per-message payload array go away?
+- [ ] [Idle TCP connection memory](/docs/issues/0042-idle-tcp-connection-memory.md) — measure one live connection and pick a smaller design.
