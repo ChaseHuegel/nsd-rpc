@@ -75,7 +75,11 @@ internal sealed class RpcDispatcher
     {
         if (context.RequestId == 0UL)
         {
-            RpcLog.Drop("notification failed with " + code + ": " + message);
+            if (RpcLog.IsEnabled)
+            {
+                RpcLog.Drop("notification failed with " + code + ": " + message);
+            }
+
             return;
         }
 

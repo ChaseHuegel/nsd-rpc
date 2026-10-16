@@ -36,9 +36,13 @@ internal sealed class HandlerEntry<TRequest, TResponse> : HandlerEntry
 
         if (!result.IsSuccess && result.ErrorCode > RpcErrorCodes.AppCodeMin)
         {
-            RpcLog.Error(
-                "handler used a reserved error code " + result.ErrorCode,
-                new InvalidOperationException("reserved error code"));
+            if (RpcLog.IsErrorEnabled)
+            {
+                RpcLog.Error(
+                    "handler used a reserved error code " + result.ErrorCode,
+                    new InvalidOperationException("reserved error code"));
+            }
+
             peer.TryFail(context.RequestId, (int)RpcErrorCode.InternalError, "internal error");
             return;
         }

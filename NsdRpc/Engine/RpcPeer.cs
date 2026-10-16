@@ -349,7 +349,11 @@ public sealed class RpcPeer : IRpcHost
                 HandleCancellation(in envelope);
                 break;
             default:
-                RpcLog.Drop("unknown message kind " + envelope.Kind);
+                if (RpcLog.IsEnabled)
+                {
+                    RpcLog.Drop("unknown message kind " + envelope.Kind);
+                }
+
                 break;
         }
     }

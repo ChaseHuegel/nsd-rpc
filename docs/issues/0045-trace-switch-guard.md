@@ -1,7 +1,7 @@
 # Improvement: Build no drop string while the trace switch is off
 
 - Type: improvement
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -22,8 +22,18 @@ message kind:
 
 ## Acceptance criteria
 
-- [ ] `RpcLog` checks `Source.Switch.ShouldTrace` before it builds a drop or error message.
-- [ ] Call sites with dynamic text, such as `"unknown message kind " + envelope.Kind`, build the text only when the switch allows the event.
-- [ ] A test with the switch off proves a drop allocates nothing on the calling thread. Use `GC.GetAllocatedBytesForCurrentThread`.
-- [ ] A test with the switch on and a listener attached proves the event arrives with the same reason text.
-- [ ] `RpcLog.Error` gets the same guard.
+- [x] `RpcLog` checks `Source.Switch.ShouldTrace` before it builds a drop or error message.
+- [x] Call sites with dynamic text, such as `"unknown message kind " + envelope.Kind`, build the text only when the switch allows the event.
+- [x] A test with the switch off proves a drop allocates nothing on the calling thread. Use `GC.GetAllocatedBytesForCurrentThread`.
+- [x] A test with the switch on and a listener attached proves the event arrives with the same reason text.
+- [x] `RpcLog.Error` gets the same guard.
+
+## Resolution
+
+`RpcLog` exposes `IsEnabled` and `IsErrorEnabled` and returns before it
+builds a message. The dynamic call sites in `RpcPeer`, `RpcDispatcher`, and
+`HandlerEntry` check the flag before they build the text.
+
+`DroppedFrameDoesNotAllocateWhenTracingIsOff` measures 100 drops with the
+default switch. `DropDeliversTheReasonWhenTheSwitchIsOn` attaches a listener
+and checks the text.
