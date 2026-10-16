@@ -49,7 +49,7 @@ before-and-after measurement in the matching issue.
 
 ## Baseline
 
-First run: 2026-10-15, library commit `2690e9a`, BenchmarkDotNet 0.15.2.
+First run: 2026-10-15, library commit `22e9bae`, BenchmarkDotNet 0.15.2.
 
 Machine: AMD Ryzen 5 3600X 4.41 GHz, 6 physical cores, 12 logical cores,
 Ubuntu 26.04.1, .NET 10.0.12, X64 RyuJIT AVX2, concurrent workstation GC.
