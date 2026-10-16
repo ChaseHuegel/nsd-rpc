@@ -607,6 +607,28 @@ public sealed class RpcPeerTests
     }
 
     [Fact]
+    public void InvokeSetupAllocatesThePendingCallAndThePayload()
+    {
+        // A connection with no peer: the call stays pending and the send path
+        // runs on the calling thread.
+        var peer = new RpcPeer(new InMemoryConnection());
+
+        // Warm up.
+        _ = peer.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1));
+        _ = peer.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1));
+
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        _ = peer.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1));
+        long allocatedAfter = GC.GetAllocatedBytesForCurrentThread();
+
+        // Tolerated: the payload array, the pending call, the completion
+        // source, the task, and the send drain state machine.
+        Assert.True(
+            allocatedAfter - allocatedBefore <= 1024,
+            "allocated " + (allocatedAfter - allocatedBefore));
+    }
+
+    [Fact]
     public async Task CancelledTokenBeforeSendDoesNotSendTheRequest()
     {
         var connection = new InMemoryConnection();

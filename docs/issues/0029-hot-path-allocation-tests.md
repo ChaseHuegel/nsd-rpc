@@ -1,7 +1,7 @@
 # Improvement: Prove hot-path allocations with real payloads
 
 - Type: improvement
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -23,8 +23,16 @@ does not show pooled churn. Each test must state what it measures.
 
 ## Acceptance criteria
 
-- [ ] Allocation tests cover the envelope round trip with a non-null payload, the peer invoke path, the dispatch path, the chunk path, and the TCP `TrySend` path.
-- [ ] Each test warms up first. Each test names its expected allocation count and the reason for every tolerated allocation.
-- [ ] The tests use no sleeps and no timing.
-- [ ] [testing.md](../testing.md) records the covered paths and the measurement limits.
-- [ ] The suite fails when a covered path adds an allocation.
+- [x] Allocation tests cover the envelope round trip with a non-null payload, the peer invoke path, the dispatch path, the chunk path, and the TCP `TrySend` path.
+- [x] Each test warms up first. Each test names its expected allocation count and the reason for every tolerated allocation.
+- [x] The tests use no sleeps and no timing.
+- [x] [testing.md](../testing.md) records the covered paths and the measurement limits.
+- [x] The suite fails when a covered path adds an allocation.
+
+## Resolution
+
+New tests cover the envelope span round trip with a payload and the peer
+invoke setup. The dispatch, registry, chunk, and TCP `TrySend` paths already
+have allocation tests. [testing.md](../testing.md) lists every path, its
+tolerance, and the measurement limits of
+`GC.GetAllocatedBytesForCurrentThread`.

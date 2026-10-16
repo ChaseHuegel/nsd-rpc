@@ -109,6 +109,30 @@ public sealed class EnvelopeTests
     }
 
     [Fact]
+    public void EnvelopeSpanRoundTripWithAPayloadAllocatesOnlyThePayload()
+    {
+        var envelope = new Envelope(1, (byte)RpcMessageKind.Request, 5UL, 3UL, new byte[128], null);
+
+        // Warm up the codec.
+        byte[] warmup = new byte[envelope.GetSize()];
+        envelope.SerializeInto(warmup);
+        _ = Envelope.Deserialize(warmup);
+
+        byte[] buffer = new byte[envelope.GetSize()];
+        envelope.SerializeInto(buffer);
+
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        Envelope actual = Envelope.Deserialize(buffer);
+        long allocatedAfter = GC.GetAllocatedBytesForCurrentThread();
+
+        // Unpack allocates the payload copy. Nothing else is tolerated.
+        Assert.Equal(128, actual.Payload!.Length);
+        Assert.True(
+            allocatedAfter - allocatedBefore <= 192,
+            "allocated " + (allocatedAfter - allocatedBefore));
+    }
+
+    [Fact]
     public void EnvelopeIgnoresAnAppendedFieldWhoseValueScansAsAKnownId()
     {
         var envelope = new Envelope(

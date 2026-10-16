@@ -29,7 +29,7 @@ add or work an issue.
 - [x] [Avoid the linked cancellation source per dispatch](/docs/issues/0025-dispatch-cancellation-token-source.md) — each inbound request allocates a linked token graph.
 - [x] [Reuse locks and payload sizes in call setup](/docs/issues/0026-call-setup-lock-and-size-reuse.md) — call setup takes the pending lock three times.
 - [x] [Allocate the peer timeout scratch lazily](/docs/issues/0028-lazy-peer-timeout-scratch.md) — each idle peer holds 8 kilobytes it never uses.
-- [ ] [Prove hot-path allocations with real payloads](/docs/issues/0029-hot-path-allocation-tests.md) — the current tests hide the codec allocation.
+- [x] [Prove hot-path allocations with real payloads](/docs/issues/0029-hot-path-allocation-tests.md) — the current tests hide the codec allocation.
 - [ ] [Skip timeout scans with a per-peer deadline watermark](/docs/issues/0043-timeout-scan-watermark.md) — a poll rescans every pending call of every peer.
 - [ ] [Cache the call-cancelled delegate in RpcPeer](/docs/issues/0044-cached-cancel-delegate.md) — the instance method group allocates per call.
 - [ ] [Build no drop string while the trace switch is off](/docs/issues/0045-trace-switch-guard.md) — drops allocate a string although the default switch blocks the event.

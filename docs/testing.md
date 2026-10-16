@@ -84,3 +84,30 @@ The transport tests pin the TCP layer:
 - [TcpIntegrationTests.cs](../NsdRpc.Tests/TcpIntegrationTests.cs:10) pins the
   handshake and round trips over loopback sockets, the bad-handshake skip, the
   handshake framing errors, the send-queue bound, and the disconnect paths.
+
+## Allocation coverage
+
+Each allocation test warms up first, then measures
+`GC.GetAllocatedBytesForCurrentThread`. Each test names the tolerated
+allocations and the bound.
+
+| Path | Test | Tolerance |
+|---|---|---|
+| Envelope span round trip, null payload | `EnvelopeSpanRoundTripAllocatesNothing` | Zero. |
+| Envelope span round trip, payload | `EnvelopeSpanRoundTripWithAPayloadAllocatesOnlyThePayload` | The payload copy only. |
+| Peer invoke setup | `InvokeSetupAllocatesThePendingCallAndThePayload` | The payload, the pending call, the completion source, the task, and the send drain state machine. |
+| Chunk dispatch | `ChunkDispatchAllocatesNothingBeyondTheCodec` | The codec allocation, measured as a baseline. |
+| TCP rejected send | `RejectedSendDoesNotAllocate` | Zero. |
+| Registry lookup | `TryGetReadsAPublishedSnapshotWithoutAllocating` | Zero. |
+| Dispatch with a token | `DispatchAllocatesOnlyTheCancellationSource` | The cancellation source. |
+| Peer construction | `PeerConstructionDoesNotAllocateTheTimeoutScratch` | Below the scratch bound. |
+
+Measurement limits:
+
+- `GC.GetAllocatedBytesForCurrentThread` shows the calling thread only. Work
+  that runs on the dispatch worker or the send drain does not appear.
+- It does not show pooled buffer churn. A pooled rent allocates no managed
+  memory.
+- It counts the object header. A 128-byte array measures more than 128 bytes.
+- A bound must leave room for the runtime. A tight bound flakes.
+
