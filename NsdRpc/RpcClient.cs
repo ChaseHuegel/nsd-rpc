@@ -4,7 +4,7 @@ namespace NsdRpc;
 /// One client endpoint: a peer over one connection plus the handler dispatcher.
 /// Own the instance for the connection's lifetime. It owns the id space.
 /// </summary>
-public sealed class RpcClient : IRpcCaller
+public sealed class RpcClient : IRpcHost
 {
     private readonly RpcPeer _peer;
 
@@ -23,6 +23,8 @@ public sealed class RpcClient : IRpcCaller
         _peer = new RpcPeer(connection, options);
         _peer.DispatchHook = new RpcDispatcher(registry, _peer).DispatchAsync;
     }
+
+    public IReadOnlyCollection<RpcPeer> Peers => _peer.Peers;
 
     public Task<RpcResult<TResponse>> InvokeAsync<TRequest, TResponse>(
         ulong method,

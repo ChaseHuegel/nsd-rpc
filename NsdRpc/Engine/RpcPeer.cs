@@ -10,7 +10,7 @@ namespace NsdRpc;
 /// One RPC peer over one connection. Owns the envelope, the id space, and the
 /// pending calls. It knows nothing about handlers.
 /// </summary>
-public sealed class RpcPeer : IRpcCaller
+public sealed class RpcPeer : IRpcHost
 {
     private const byte RpcVersion = 1;
 
@@ -39,6 +39,8 @@ public sealed class RpcPeer : IRpcCaller
     private volatile bool _faulted;
     private RpcDispatchHook? _dispatchHook;
 
+    private readonly RpcPeer[] _selfPeers;
+
     public RpcPeer(IRpcConnection connection, RpcOptions? options = null)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
@@ -48,11 +50,14 @@ public sealed class RpcPeer : IRpcCaller
         _isServer = connection is IServerConnection;
         _clientId = (connection as IServerConnection)?.ClientId ?? 0UL;
         _expiredScratch = new PendingCallBase[_options.MaxPendingCalls];
+        _selfPeers = [this];
         _connection.Disconnected += OnDisconnected;
         _connection.FrameReceived += HandleFrame;
     }
 
     internal IRpcConnection Connection => _connection;
+
+    public IReadOnlyCollection<RpcPeer> Peers => _selfPeers;
 
     /// <summary>The client id the server assigned, or zero on the client side.</summary>
     public ulong ClientId => _clientId;

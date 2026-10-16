@@ -22,7 +22,7 @@ add or work an issue.
 
 ### Improvement
 
-- [ ] [IRpcHost and the server broadcast call surface](/docs/issues/0020-rpc-host-broadcast.md) — one endpoint interface over `RpcClient`, `RpcPeer`, and `RpcServer`.
+- [x] [IRpcHost and the server broadcast call surface](/docs/issues/0020-rpc-host-broadcast.md) — one endpoint interface over `RpcClient`, `RpcPeer`, and `RpcServer`.
 - [ ] [Cache the TCP frame delegate on the connection](/docs/issues/0022-cache-tcp-frame-delegate.md) — the receive loop allocates a delegate per socket read.
 - [ ] [Read the frozen handler registry without a lock](/docs/issues/0023-lock-free-frozen-registry.md) — every dispatch takes the registry lock.
 - [ ] [Remove the extra copy on the TCP send path](/docs/issues/0024-tcp-send-copy-elimination.md) — `TrySend` copies each frame into a fresh array.

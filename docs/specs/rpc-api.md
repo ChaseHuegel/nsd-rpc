@@ -176,11 +176,13 @@ public sealed class RpcClient
     public void Poll();
 }
 
-public sealed class RpcServer
+public sealed class RpcServer : IRpcHost
 {
     public RpcServer(IRpcServerTransport transport, RpcRegistry registry, RpcOptions? options = null);
     public void Start();   // launches the accept loop. Call once.
     public RpcPeer? GetPeer(ulong clientId);
+    public IReadOnlyCollection<RpcPeer> Peers { get; }
+    // InvokeAsync, InvokeStreamAsync, and Notify: the broadcast surface.
     public void CheckTimeouts(long timestampNanos);
     public void Poll();
     public void Close();
@@ -198,6 +200,22 @@ public sealed class RpcServer
   `ClientDisconnected` fires when a peer leaves, through a disconnect, a
   prune, or a close. The events let a server broadcast to its clients.
 - Both types are plain constructible classes. The app owns their lifetime.
+
+## IRpcHost
+
+`IRpcHost : IRpcCaller` adds `IReadOnlyCollection<RpcPeer> Peers`. `RpcPeer`
+and `RpcClient` expose a single peer. `RpcServer` exposes a snapshot of its
+live peers and broadcasts.
+
+`RpcServer` aggregation rules:
+
+- `Notify` sends to every peer. It returns true when every peer accepted, and
+  false when there are no peers.
+- `InvokeAsync` calls every peer. The first failure in peer order wins. With
+  no failure, the last success wins. No peers fails with `Unavailable`.
+- `InvokeStreamAsync` fans every chunk into one sink or one session, then
+  aggregates the response like `InvokeAsync`.
+- The timeout and the token apply to each peer call.
 
 ## RpcContext
 
