@@ -1,7 +1,7 @@
 # Improvement: Cache the TCP frame delegate on the connection
 
 - Type: improvement
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -24,6 +24,18 @@ allocation on hot paths.
 
 ## Acceptance criteria
 
-- [ ] `TcpConnection` creates the `RpcFrameHandler` once and stores it in a field. The receive loop passes that field to `TryPush`.
-- [ ] A release-build IL check shows no `newobj RpcFrameHandler` inside `ReceiveLoopAsync`. Record the check in this issue.
-- [ ] All TCP integration tests pass unchanged.
+- [x] `TcpConnection` creates the `RpcFrameHandler` once and stores it in a field. The receive loop passes that field to `TryPush`.
+- [x] A release-build IL check shows no `newobj RpcFrameHandler` inside `ReceiveLoopAsync`. Record the check in this issue.
+- [x] All TCP integration tests pass unchanged.
+
+## Resolution
+
+`TcpConnection` stores one `RpcFrameHandler` field, `_onFrame`, and the
+receive loop passes it to `TryPush`.
+
+Release-build IL check (dotnet-ildasm 0.12.2, `net10.0` Release): the
+`ReceiveLoopAsync` state machine loads `_onFrame` (`ldfld`) and calls
+`TryPush`. The method contains no `newobj RpcFrameHandler`. The only two
+`newobj RpcFrameHandler` sites in the assembly are the `TcpConnection`
+constructor and the `TcpClientConnection.ConnectAsync` subscription. Both
+run once per connection.

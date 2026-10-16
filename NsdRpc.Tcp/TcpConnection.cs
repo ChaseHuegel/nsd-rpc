@@ -16,6 +16,7 @@ internal sealed class TcpConnection : IRpcConnection
     private readonly Socket _socket;
     private readonly TcpFrameDecoder _decoder;
     private readonly TcpOptions _tcpOptions;
+    private readonly RpcFrameHandler _onFrame;
     private readonly object _sendLock = new();
     private readonly Queue<byte[]> _sendQueue = new();
     private readonly CancellationTokenSource _lifetime = new();
@@ -31,6 +32,8 @@ internal sealed class TcpConnection : IRpcConnection
         _socket = socket;
         _tcpOptions = tcpOptions;
         _decoder = new TcpFrameDecoder(rpcOptions.MaxFrameBytes);
+        // One delegate for the connection. The receive loop must not allocate.
+        _onFrame = OnFrame;
     }
 
     public bool IsConnected => _disconnected == 0;
@@ -175,8 +178,7 @@ internal sealed class TcpConnection : IRpcConnection
                     break;
                 }
 
-                if (!_decoder.TryPush(
-                        buffer.AsSpan(0, read), frame => _frameReceivedHandlers?.Invoke(frame)))
+                if (!_decoder.TryPush(buffer.AsSpan(0, read), _onFrame))
                 {
                     break;
                 }
@@ -235,6 +237,11 @@ internal sealed class TcpConnection : IRpcConnection
 
             filled += read;
         }
+    }
+
+    private void OnFrame(ReadOnlySpan<byte> frame)
+    {
+        _frameReceivedHandlers?.Invoke(frame);
     }
 
     private void FireDisconnected()
