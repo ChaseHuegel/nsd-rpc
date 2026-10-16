@@ -94,13 +94,20 @@ internal sealed class TcpConnection : IRpcConnection
 
     public async Task RunHandshakeAsync()
     {
+        using var handshake = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        if (_tcpOptions.HandshakeTimeout > TimeSpan.Zero)
+        {
+            handshake.CancelAfter(_tcpOptions.HandshakeTimeout);
+        }
+
+        CancellationToken token = handshake.Token;
         byte[] payload = new Handshake(TcpProtocol.Version).Serialize();
         byte[] frame = new byte[4 + payload.Length];
         BinaryPrimitives.WriteInt32LittleEndian(frame, payload.Length);
         payload.CopyTo(frame, 4);
 
-        await SendAllAsync(frame).ConfigureAwait(false);
-        byte[] theirs = await ReadOneFrameAsync().ConfigureAwait(false);
+        await SendAllAsync(frame, token).ConfigureAwait(false);
+        byte[] theirs = await ReadOneFrameAsync(token).ConfigureAwait(false);
         Handshake other = Handshake.Deserialize((ReadOnlySpan<byte>)theirs);
         if (other.ProtocolVersion != TcpProtocol.Version)
         {
@@ -182,21 +189,21 @@ internal sealed class TcpConnection : IRpcConnection
         }
     }
 
-    private async Task SendAllAsync(byte[] data)
+    private async Task SendAllAsync(byte[] data, CancellationToken cancellationToken)
     {
         int offset = 0;
         while (offset < data.Length)
         {
             int sent = await _socket.SendAsync(
-                data.AsMemory(offset), SocketFlags.None, _lifetime.Token).ConfigureAwait(false);
+                data.AsMemory(offset), SocketFlags.None, cancellationToken).ConfigureAwait(false);
             offset += sent;
         }
     }
 
-    private async Task<byte[]> ReadOneFrameAsync()
+    private async Task<byte[]> ReadOneFrameAsync(CancellationToken cancellationToken)
     {
         byte[] header = new byte[4];
-        await ReadExactAsync(header, 4).ConfigureAwait(false);
+        await ReadExactAsync(header, 4, cancellationToken).ConfigureAwait(false);
         int length = BinaryPrimitives.ReadInt32LittleEndian(header);
         if (length <= 0 || length > _decoder.MaxFrameBytes)
         {
@@ -204,17 +211,18 @@ internal sealed class TcpConnection : IRpcConnection
         }
 
         byte[] payload = new byte[length];
-        await ReadExactAsync(payload, length).ConfigureAwait(false);
+        await ReadExactAsync(payload, length, cancellationToken).ConfigureAwait(false);
         return payload;
     }
 
-    private async Task ReadExactAsync(byte[] buffer, int count)
+    private async Task ReadExactAsync(byte[] buffer, int count, CancellationToken cancellationToken)
     {
         int filled = 0;
         while (filled < count)
         {
             int read = await _socket.ReceiveAsync(
-                buffer.AsMemory(filled, count - filled), SocketFlags.None, _lifetime.Token).ConfigureAwait(false);
+                buffer.AsMemory(filled, count - filled), SocketFlags.None, cancellationToken)
+                .ConfigureAwait(false);
             if (read == 0)
             {
                 throw new InvalidDataException("The connection closed during the handshake.");

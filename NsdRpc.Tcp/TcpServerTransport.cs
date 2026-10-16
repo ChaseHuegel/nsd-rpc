@@ -6,7 +6,8 @@ using NsdRpc;
 namespace NsdRpc.Tcp;
 
 /// <summary>
-/// A TCP listener. Accept one connection per AcceptAsync call.
+/// A TCP listener. Accept one connection per AcceptAsync call. Each handshake
+/// runs in the background, so a slow client never stalls the other clients.
 /// </summary>
 public sealed class TcpServerTransport : IRpcServerTransport
 {
@@ -15,8 +16,12 @@ public sealed class TcpServerTransport : IRpcServerTransport
     private readonly object _listenerLock = new();
     private readonly object _acceptedLock = new();
     private readonly List<TcpServerConnection> _accepted = [];
+    private readonly object _readyLock = new();
+    private readonly Queue<TcpServerConnection> _ready = new();
+    private readonly SemaphoreSlim _readySignal = new(0);
     private TcpListener? _listener;
     private bool _listenerStarted;
+    private Task? _acceptLoop;
     private ulong _nextClientId = 1;
     private volatile bool _closed;
 
@@ -42,13 +47,9 @@ public sealed class TcpServerTransport : IRpcServerTransport
         }
     }
 
-    [SuppressMessage(
-        "Design",
-        "CA1031",
-        Justification = "A failed handshake skips one connection and keeps accepting. It is a transport boundary.")]
     public async Task<IServerConnection?> AcceptAsync()
     {
-        TcpListener listener = EnsureListener();
+        StartAccepting();
         while (true)
         {
             if (_closed)
@@ -56,20 +57,79 @@ public sealed class TcpServerTransport : IRpcServerTransport
                 return null;
             }
 
+            await _readySignal.WaitAsync().ConfigureAwait(false);
+            if (_closed)
+            {
+                return null;
+            }
+
+            lock (_readyLock)
+            {
+                if (_ready.Count > 0)
+                {
+                    return _ready.Dequeue();
+                }
+            }
+        }
+    }
+
+    public void Close()
+    {
+        _closed = true;
+        lock (_listenerLock)
+        {
+            _listener?.Stop();
+        }
+
+        TcpServerConnection[] connections;
+        lock (_acceptedLock)
+        {
+            connections = _accepted.ToArray();
+            _accepted.Clear();
+        }
+
+        foreach (TcpServerConnection connection in connections)
+        {
+            connection.Close();
+        }
+
+        // Wake a waiting AcceptAsync so it observes the close.
+        _readySignal.Release();
+    }
+
+    private void StartAccepting()
+    {
+        lock (_listenerLock)
+        {
+            if (_acceptLoop == null)
+            {
+                _acceptLoop = Task.Run(AcceptLoopAsync);
+            }
+        }
+    }
+
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "A failed accept ends the loop. It is a transport boundary.")]
+    private async Task AcceptLoopAsync()
+    {
+        while (!_closed)
+        {
             Socket socket;
             try
             {
-                socket = await listener.AcceptSocketAsync().ConfigureAwait(false);
+                socket = await EnsureListener().AcceptSocketAsync().ConfigureAwait(false);
             }
             catch (Exception)
             {
-                return null;
+                break;
             }
 
             if (_closed)
             {
                 socket.Dispose();
-                return null;
+                break;
             }
 
             socket.NoDelay = _tcpOptions.NoDelay;
@@ -84,37 +144,37 @@ public sealed class TcpServerTransport : IRpcServerTransport
                 _accepted.Add(connection);
             }
 
-            try
-            {
-                await connection.RunHandshakeAsync().ConfigureAwait(false);
-            }
-            catch (Exception)
-            {
-                // Close fires Disconnected, and the handler removes the entry.
-                connection.Close();
-                continue;
-            }
-
-            connection.StartReceiving();
-            return connection;
+            _ = CompleteHandshakeAsync(connection);
         }
+
+        // Wake a waiting AcceptAsync so it observes the close.
+        _readySignal.Release();
     }
 
-    public void Close()
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "A failed handshake skips one connection. It is a transport boundary.")]
+    private async Task CompleteHandshakeAsync(TcpServerConnection connection)
     {
-        _closed = true;
-        _listener?.Stop();
-        TcpServerConnection[] connections;
-        lock (_acceptedLock)
+        try
         {
-            connections = _accepted.ToArray();
-            _accepted.Clear();
+            await connection.RunHandshakeAsync().ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // Close fires Disconnected, and the handler removes the entry.
+            connection.Close();
+            return;
         }
 
-        foreach (TcpServerConnection connection in connections)
+        connection.StartReceiving();
+        lock (_readyLock)
         {
-            connection.Close();
+            _ready.Enqueue(connection);
         }
+
+        _readySignal.Release();
     }
 
     private void RemoveAccepted(TcpServerConnection connection)
@@ -130,7 +190,7 @@ public sealed class TcpServerTransport : IRpcServerTransport
         lock (_listenerLock)
         {
             _listener ??= new TcpListener(IPAddress.Any, _tcpOptions.Port);
-            if (!_listenerStarted)
+            if (!_listenerStarted && !_closed)
             {
                 _listener.Start();
                 _listenerStarted = true;

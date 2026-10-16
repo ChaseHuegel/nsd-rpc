@@ -1,7 +1,7 @@
 # Bug: The TCP accept loop stalls on a silent client
 
 - Type: bug
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem

@@ -1,0 +1,19 @@
+using NsdRpc.Tcp;
+
+namespace NsdRpc.Tests;
+
+public sealed class TcpOptionsTests
+{
+    [Fact]
+    public void TcpOptionsDefaultsMatchTheSpec()
+    {
+        var options = new TcpOptions();
+
+        Assert.Equal("localhost", options.Host);
+        Assert.Equal(0, options.Port);
+        Assert.True(options.NoDelay);
+        Assert.Equal(TimeSpan.FromSeconds(10), options.HandshakeTimeout);
+        Assert.Equal(65536, options.ReceiveBufferBytes);
+        Assert.Equal(1048576, options.SendQueueBytes);
+    }
+}

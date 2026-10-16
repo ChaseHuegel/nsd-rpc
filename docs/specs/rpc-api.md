@@ -80,6 +80,24 @@ public sealed class RpcOptions
   supported.
 - Tests inject a fake `TimestampNanos`. No test sleeps.
 
+## TcpOptions
+
+The TCP transport options live in
+[NsdRpc.Tcp/TcpOptions.cs](../../NsdRpc.Tcp/TcpOptions.cs).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `Host` | `"localhost"` | The remote host for the client. The server ignores it. |
+| `Port` | `0` | The port. Zero binds an ephemeral port on the server. |
+| `NoDelay` | `true` | Disables Nagle's algorithm. |
+| `HandshakeTimeout` | 10 seconds | The deadline for one handshake. Zero or negative disables it. |
+| `ReceiveBufferBytes` | 65,536 | The receive buffer size for one connection. |
+| `SendQueueBytes` | 1,048,576 | The largest queued send bytes for one connection. A full queue rejects the send. |
+
+The server transport completes each handshake in the background. A silent
+client does not stall the other clients. A handshake that passes its
+deadline closes the connection.
+
 ## RpcPeer
 
 The engine lives in

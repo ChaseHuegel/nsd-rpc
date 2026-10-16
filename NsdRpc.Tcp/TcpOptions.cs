@@ -14,6 +14,9 @@ public sealed class TcpOptions
     /// <summary>Disables Nagle's algorithm when true.</summary>
     public bool NoDelay { get; set; } = true;
 
+    /// <summary>The deadline for one handshake. Zero or negative disables it.</summary>
+    public TimeSpan HandshakeTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
     /// <summary>The receive buffer size per connection.</summary>
     public int ReceiveBufferBytes { get; set; } = 65536;
 

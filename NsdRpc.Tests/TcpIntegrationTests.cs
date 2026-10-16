@@ -71,6 +71,60 @@ public sealed class TcpIntegrationTests
     }
 
     [Fact]
+    public async Task SilentClientDoesNotBlockACallFromTheNextClient()
+    {
+        var transport = new TcpServerTransport(
+            new RpcOptions(),
+            new TcpOptions { HandshakeTimeout = TimeSpan.FromSeconds(30) });
+        var registry = new RpcRegistry();
+        registry.Add(new EchoHandler());
+        var server = new RpcServer(transport, registry);
+        server.Start();
+
+        // A silent client holds its handshake open.
+        using var silent = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        await silent.ConnectAsync(IPAddress.Loopback, transport.Port);
+
+        var connection = new TcpClientConnection(
+            new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
+        var client = new RpcClient(connection, new RpcRegistry());
+        await connection.ConnectAsync();
+
+        RpcResult<Handshake> result = await client
+            .InvokeAsync<Handshake, Handshake>(300, new Handshake(41))
+            .WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.True(result.IsSuccess, "code=" + result.ErrorCode + " message=" + result.ErrorMessage);
+        Assert.Equal(42, result.Value.ProtocolVersion);
+        server.Close();
+    }
+
+    [Fact]
+    public async Task SilentClientIsDroppedAtTheHandshakeDeadline()
+    {
+        var transport = new TcpServerTransport(
+            new RpcOptions(),
+            new TcpOptions { HandshakeTimeout = TimeSpan.FromMilliseconds(100) });
+        Task<IServerConnection?> accept = transport.AcceptAsync();
+        using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        await socket.ConnectAsync(IPAddress.Loopback, transport.Port);
+
+        // Read the server handshake, then send nothing.
+        await ReadFrameAsync(socket);
+
+        // The transport waits for the handshake frame, then closes the socket.
+        byte[] buffer = new byte[1];
+        int read = await socket
+            .ReceiveAsync(buffer, SocketFlags.None)
+            .WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(0, read);
+        Assert.False(accept.IsCompleted);
+        transport.Close();
+        Assert.Null(await accept.WaitAsync(TimeSpan.FromSeconds(10)));
+    }
+
+    [Fact]
     public async Task TransportSkipsAConnectionWithABadHandshake()
     {
         var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
