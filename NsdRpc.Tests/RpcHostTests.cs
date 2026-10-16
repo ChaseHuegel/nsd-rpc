@@ -7,29 +7,8 @@ namespace NsdRpc.Tests;
 public sealed class RpcHostTests
 {
     private const ulong EchoMethod = 202;
-    private const ulong FailMethod = 203;
-    private const ulong NotifyMethod = 204;
-    private const ulong StreamMethod = 205;
-
-    private sealed class EchoHandler : IRpcHandler<Handshake, Handshake>
-    {
-        public ValueTask<RpcResult<Handshake>> ExecuteAsync(
-            Handshake request, RpcContext context, CancellationToken cancellationToken)
-        {
-            return new ValueTask<RpcResult<Handshake>>(
-                RpcResult<Handshake>.Success(new Handshake(request.ProtocolVersion + 1)));
-        }
-    }
-
-    private sealed class FailHandler : IRpcHandler<Handshake, Handshake>
-    {
-        public ValueTask<RpcResult<Handshake>> ExecuteAsync(
-            Handshake request, RpcContext context, CancellationToken cancellationToken)
-        {
-            return new ValueTask<RpcResult<Handshake>>(
-                RpcResult<Handshake>.Failure(-32100, "app failure"));
-        }
-    }
+    private const ulong TriggerMethod = 204;
+    private const ulong FanOutMethod = 205;
 
     private sealed class SignalingHandler : IRpcHandler<Handshake, Handshake>
     {
@@ -48,14 +27,34 @@ public sealed class RpcHostTests
         }
     }
 
-    private sealed class StreamHandler : IRpcHandler<Handshake, Handshake>
+    // A server handler that fans out to every peer through the context. It
+    // holds no peer set, so one instance serves any server.
+    private sealed class FanOutHandler : IRpcHandler<Handshake, Handshake>
     {
         public ValueTask<RpcResult<Handshake>> ExecuteAsync(
             Handshake request, RpcContext context, CancellationToken cancellationToken)
         {
-            context.Stream(new Handshake(1));
-            context.Stream(new Handshake(2));
+            foreach (RpcPeer peer in context.Host.Peers)
+            {
+                peer.Notify(FanOutMethod, in request);
+            }
+
             return new ValueTask<RpcResult<Handshake>>(RpcResult<Handshake>.Success(request));
+        }
+    }
+
+    private sealed class CountingEchoHandler : IRpcHandler<Handshake, Handshake>
+    {
+        private int _count;
+
+        public int Count => Volatile.Read(ref _count);
+
+        public ValueTask<RpcResult<Handshake>> ExecuteAsync(
+            Handshake request, RpcContext context, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _count);
+            return new ValueTask<RpcResult<Handshake>>(
+                RpcResult<Handshake>.Success(new Handshake(request.ProtocolVersion + 1)));
         }
     }
 
@@ -71,67 +70,81 @@ public sealed class RpcHostTests
     }
 
     [Fact]
-    public async Task EmptyHostFailsCallsAndNotify()
+    public void PeerSetDefaultIsEmpty()
+    {
+        PeerSet peers = default;
+
+        Assert.Empty(peers);
+        int seen = 0;
+        foreach (RpcPeer _ in peers)
+        {
+            seen++;
+        }
+
+        Assert.Equal(0, seen);
+    }
+
+    [Fact]
+    public void PeerSetIterationDoesNotAllocate()
+    {
+        var peer = new RpcPeer(new InMemoryConnection());
+        PeerSet peers = peer.Peers;
+
+        int seen = 0;
+        foreach (RpcPeer _ in peers)
+        {
+            seen++;
+        }
+
+        Assert.Equal(1, seen);
+
+        // Warm up, then measure.
+        foreach (RpcPeer _ in peers)
+        {
+            seen++;
+        }
+
+        long before = GC.GetAllocatedBytesForCurrentThread();
+        for (int index = 0; index < 1000; index++)
+        {
+            foreach (RpcPeer _ in peers)
+            {
+                seen++;
+            }
+        }
+
+        long after = GC.GetAllocatedBytesForCurrentThread();
+        Assert.Equal(before, after);
+    }
+
+    [Fact]
+    public void EmptyServerExposesNoPeers()
     {
         var server = new RpcServer(new FakeServerTransport(), new RpcRegistry());
 
-        RpcResult<Handshake> result =
-            await server.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1));
-
         Assert.Empty(server.Peers);
-        Assert.False(result.IsSuccess);
-        Assert.Equal((int)RpcErrorCode.Unavailable, result.ErrorCode);
-        Assert.False(server.Notify(NotifyMethod));
-        Assert.False(server.Notify<Handshake>(NotifyMethod, new Handshake(1)));
+        Assert.Null(server.GetPeer(1));
         server.Close();
     }
 
     [Fact]
-    public async Task BroadcastInvokeReturnsTheLastSuccess()
-    {
-        (RpcServer server, List<RpcClient> _) = await StartAsync(2, static (registry, index) =>
-            registry.Add<Handshake, Handshake>(new EchoHandler(), EchoMethod));
-
-        RpcResult<Handshake> result = await server
-            .InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1))
-            .WaitAsync(TimeSpan.FromSeconds(10));
-
-        Assert.Equal(2, server.Peers.Count);
-        Assert.True(result.IsSuccess, "code=" + result.ErrorCode + " message=" + result.ErrorMessage);
-        Assert.Equal(2, result.Value.ProtocolVersion);
-        server.Close();
-    }
-
-    [Fact]
-    public async Task BroadcastInvokeReturnsTheFirstFailure()
-    {
-        (RpcServer server, List<RpcClient> _) = await StartAsync(2, static (registry, index) =>
-            registry.Add<Handshake, Handshake>(new FailHandler(), FailMethod));
-
-        RpcResult<Handshake> result = await server
-            .InvokeAsync<Handshake, Handshake>(FailMethod, new Handshake(1))
-            .WaitAsync(TimeSpan.FromSeconds(10));
-
-        Assert.False(result.IsSuccess);
-        Assert.Equal(-32100, result.ErrorCode);
-        server.Close();
-    }
-
-    [Fact]
-    public async Task BroadcastNotifyReachesEveryPeer()
+    public async Task HandlerFansOutThroughContextHost()
     {
         var gates = new List<TaskCompletionSource>();
-        (RpcServer server, List<RpcClient> _) = await StartAsync(2, (registry, index) =>
-        {
-            var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            gates.Add(gate);
-            registry.Add<Handshake, Handshake>(new SignalingHandler(gate), NotifyMethod);
-        });
+        (RpcServer server, List<RpcClient> clients) = await StartAsync(
+            2,
+            (registry, index) =>
+            {
+                var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                gates.Add(gate);
+                registry.Add<Handshake, Handshake>(new SignalingHandler(gate), FanOutMethod);
+            },
+            serverRegistry => serverRegistry.Add<Handshake, Handshake>(new FanOutHandler(), TriggerMethod));
 
-        bool accepted = server.Notify<Handshake>(NotifyMethod, new Handshake(1));
-
-        Assert.True(accepted);
         Assert.Equal(2, gates.Count);
+        bool sent = clients[0].Notify(TriggerMethod, new Handshake(1));
+        Assert.True(sent);
+
         foreach (TaskCompletionSource gate in gates)
         {
             await gate.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -141,30 +154,90 @@ public sealed class RpcHostTests
     }
 
     [Fact]
-    public async Task BroadcastStreamFansInEveryChunk()
+    public async Task CallerTargetsOnePeer()
     {
-        (RpcServer server, List<RpcClient> _) = await StartAsync(2, static (registry, index) =>
-            registry.Add<Handshake, Handshake>(new StreamHandler(), StreamMethod));
-
-        RpcStreamSession<Handshake, Handshake> session = server
-            .InvokeStreamAsync<Handshake, Handshake, Handshake>(StreamMethod, new Handshake(1));
-
-        int chunkCount = 0;
-        await foreach (Handshake chunk in session.Chunks)
+        var handlers = new List<CountingEchoHandler>();
+        (RpcServer server, List<RpcClient> _) = await StartAsync(2, (registry, index) =>
         {
-            chunkCount++;
+            var handler = new CountingEchoHandler();
+            handlers.Add(handler);
+            registry.Add<Handshake, Handshake>(handler, EchoMethod);
+        });
+
+        RpcPeer target = server.Peers[0];
+        RpcResult<Handshake> result = await target
+            .InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1))
+            .WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.True(result.IsSuccess, "code=" + result.ErrorCode + " message=" + result.ErrorMessage);
+        Assert.Equal(2, result.Value.ProtocolVersion);
+
+        // Exactly one client ran the handler. The server reached one peer.
+        int total = 0;
+        foreach (CountingEchoHandler handler in handlers)
+        {
+            total += handler.Count;
         }
 
-        RpcResult<Handshake> response = await session.Response.WaitAsync(TimeSpan.FromSeconds(10));
-        Assert.True(response.IsSuccess);
-        Assert.Equal(4, chunkCount);
+        Assert.Equal(1, total);
+        server.Close();
+    }
+
+    [Fact]
+    public async Task PeerSetSnapshotIsImmutable()
+    {
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        var server = new RpcServer(transport, new RpcRegistry());
+        int connected = 0;
+        var firstConnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var secondConnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.ClientConnected += _ =>
+        {
+            int count = Interlocked.Increment(ref connected);
+            if (count == 1)
+            {
+                firstConnected.TrySetResult();
+            }
+            else if (count == 2)
+            {
+                secondConnected.TrySetResult();
+            }
+        };
+        server.Start();
+
+        var firstConnection = new TcpClientConnection(
+            new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
+        var firstClient = new RpcClient(firstConnection, new RpcRegistry());
+        await firstConnection.ConnectAsync();
+        await firstConnected.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        PeerSet captured = server.Peers;
+        Assert.Single(captured);
+
+        var secondConnection = new TcpClientConnection(
+            new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
+        var secondClient = new RpcClient(secondConnection, new RpcRegistry());
+        await secondConnection.ConnectAsync();
+        await secondConnected.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // The captured snapshot is unchanged. A fresh read sees the new peer.
+        Assert.Single(captured);
+        Assert.Equal(2, server.Peers.Count);
+
+        // A client host exposes its one peer.
+        Assert.Single(firstClient.Peers);
+        Assert.Single(secondClient.Peers);
         server.Close();
     }
 
     private static async Task<(RpcServer Server, List<RpcClient> Clients)> StartAsync(
-        int clientCount, Action<RpcRegistry, int> configureClient)
+        int clientCount,
+        Action<RpcRegistry, int> configureClient,
+        Action<RpcRegistry>? configureServer = null)
     {
         var serverRegistry = new RpcRegistry();
+        configureServer?.Invoke(serverRegistry);
+        serverRegistry.Freeze();
         var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
         var server = new RpcServer(transport, serverRegistry);
         var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

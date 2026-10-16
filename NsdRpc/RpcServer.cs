@@ -1,18 +1,20 @@
-using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 
 namespace NsdRpc;
 
 /// <summary>
 /// One server endpoint: one peer per accepted connection plus the handler
-/// dispatcher. Start launches the accept loop.
+/// dispatcher. Start launches the accept loop. Select a peer from
+/// <see cref="Peers"/> or <see cref="GetPeer"/> and call it.
 /// </summary>
 public sealed class RpcServer : IRpcHost
 {
     private readonly IRpcServerTransport _transport;
     private readonly RpcRegistry _registry;
     private readonly RpcOptions _options;
-    private readonly ConcurrentDictionary<ulong, RpcPeer> _peers = new();
+    private readonly object _gate = new();
+    private readonly Dictionary<ulong, RpcPeer> _peers = new();
+    private volatile RpcPeer[] _snapshot = [];
     private volatile bool _closed;
     private Task? _acceptLoop;
 
@@ -53,143 +55,24 @@ public sealed class RpcServer : IRpcHost
     /// <summary>The peer for one client, or null for an unknown client id.</summary>
     public RpcPeer? GetPeer(ulong clientId)
     {
-        return _peers.TryGetValue(clientId, out RpcPeer? peer) ? peer : null;
+        lock (_gate)
+        {
+            return _peers.TryGetValue(clientId, out RpcPeer? peer) ? peer : null;
+        }
     }
 
-    /// <summary>The live peers. A snapshot.</summary>
-    public IReadOnlyCollection<RpcPeer> Peers => SnapshotPeers();
-
-    /// <summary>
-    /// Invokes every peer. The first failure wins. With no failure, the last
-    /// success wins. No peers fails with <see cref="RpcErrorCode.Unavailable"/>.
-    /// </summary>
-    public Task<RpcResult<TResponse>> InvokeAsync<TRequest, TResponse>(
-        ulong method,
-        in TRequest request,
-        TimeSpan? timeout = null,
-        CancellationToken cancellationToken = default)
-        where TRequest : struct
-        where TResponse : struct
-    {
-        RpcPeer[] peers = SnapshotPeers();
-        if (peers.Length == 0)
-        {
-            return NoPeers<TResponse>();
-        }
-
-        return AggregateAsync<TRequest, TResponse>(peers, method, request, timeout, cancellationToken);
-    }
-
-    /// <summary>
-    /// Invokes every peer and fans every chunk into one sink. The aggregation
-    /// matches <see cref="InvokeAsync"/>.
-    /// </summary>
-    public Task<RpcResult<TResponse>> InvokeStreamAsync<TRequest, TChunk, TResponse>(
-        ulong method,
-        in TRequest request,
-        IChunkSink<TChunk> sink,
-        TimeSpan? timeout = null,
-        CancellationToken cancellationToken = default)
-        where TRequest : struct
-        where TChunk : struct
-        where TResponse : struct
-    {
-        if (sink == null)
-        {
-            throw new ArgumentNullException(nameof(sink));
-        }
-
-        RpcPeer[] peers = SnapshotPeers();
-        if (peers.Length == 0)
-        {
-            return NoPeers<TResponse>();
-        }
-
-        return AggregateStreamAsync<TRequest, TChunk, TResponse>(
-            peers, method, request, sink, timeout, cancellationToken);
-    }
-
-    /// <summary>
-    /// Invokes every peer and returns a session that merges every chunk. The
-    /// response aggregates like <see cref="InvokeAsync"/>.
-    /// </summary>
-    public RpcStreamSession<TChunk, TResponse> InvokeStreamAsync<TRequest, TChunk, TResponse>(
-        ulong method,
-        in TRequest request,
-        TimeSpan? timeout = null,
-        CancellationToken cancellationToken = default)
-        where TRequest : struct
-        where TChunk : struct
-        where TResponse : struct
-    {
-        var queue = new AsyncChunkQueue<TChunk>(_options.MaxBufferedChunks);
-        var sink = new SessionChunkSink<TChunk>(queue);
-        Task<RpcResult<TResponse>> response = InvokeStreamAsync<TRequest, TChunk, TResponse>(
-            method, in request, sink, timeout, cancellationToken);
-        return new RpcStreamSession<TChunk, TResponse>(response, queue);
-    }
-
-    /// <summary>
-    /// Notifies every peer. Returns true when every peer accepted. No peers
-    /// returns false.
-    /// </summary>
-    public bool Notify<TRequest>(ulong method, in TRequest request)
-        where TRequest : struct
-    {
-        RpcPeer[] peers = SnapshotPeers();
-        if (peers.Length == 0)
-        {
-            return false;
-        }
-
-        bool accepted = true;
-        for (int index = 0; index < peers.Length; index++)
-        {
-            if (!peers[index].Notify(method, in request))
-            {
-                accepted = false;
-            }
-        }
-
-        return accepted;
-    }
-
-    /// <summary>
-    /// Notifies every peer. Returns true when every peer accepted. No peers
-    /// returns false.
-    /// </summary>
-    public bool Notify(ulong method)
-    {
-        RpcPeer[] peers = SnapshotPeers();
-        if (peers.Length == 0)
-        {
-            return false;
-        }
-
-        bool accepted = true;
-        for (int index = 0; index < peers.Length; index++)
-        {
-            if (!peers[index].Notify(method))
-            {
-                accepted = false;
-            }
-        }
-
-        return accepted;
-    }
+    /// <summary>The live peers. An immutable snapshot.</summary>
+    public PeerSet Peers => new(_snapshot);
 
     public void CheckTimeouts(long timestampNanos)
     {
-        foreach (KeyValuePair<ulong, RpcPeer> pair in _peers)
+        foreach (RpcPeer peer in _snapshot)
         {
-            RpcPeer peer = pair.Value;
             peer.CheckTimeouts(timestampNanos);
-            if (peer.Connection.IsConnected)
+            if (!peer.Connection.IsConnected)
             {
-                continue;
+                RemovePeer(peer.ClientId);
             }
-
-            RemovePeer(pair.Key);
         }
     }
 
@@ -203,13 +86,20 @@ public sealed class RpcServer : IRpcHost
     {
         _closed = true;
         _transport.Close();
-        foreach (KeyValuePair<ulong, RpcPeer> pair in _peers)
+
+        RpcPeer[] peers;
+        lock (_gate)
         {
-            pair.Value.FaultPending((int)RpcErrorCode.Unavailable, "server closed");
-            ClientDisconnected?.Invoke(pair.Value);
+            peers = _snapshot;
+            _peers.Clear();
+            _snapshot = [];
         }
 
-        _peers.Clear();
+        for (int index = 0; index < peers.Length; index++)
+        {
+            peers[index].FaultPending((int)RpcErrorCode.Unavailable, "server closed");
+            ClientDisconnected?.Invoke(peers[index]);
+        }
     }
 
     [SuppressMessage(
@@ -244,8 +134,17 @@ public sealed class RpcServer : IRpcHost
             Invariant.That(connection.ClientId != 0UL, "The server transport assigned client id zero.");
             var peer = new RpcPeer(connection, _options);
             peer.DispatchHook = new RpcDispatcher(_registry, peer).DispatchAsync;
-            Invariant.That(_peers.TryAdd(connection.ClientId, peer), "The server transport assigned a duplicate client id.");
+            peer.Host = this;
             ulong clientId = connection.ClientId;
+            lock (_gate)
+            {
+                Invariant.That(
+                    !_peers.ContainsKey(clientId),
+                    "The server transport assigned a duplicate client id.");
+                _peers.Add(clientId, peer);
+                _snapshot = BuildSnapshot();
+            }
+
             connection.Disconnected += () => RemovePeer(clientId);
             ClientConnected?.Invoke(peer);
         }
@@ -253,92 +152,32 @@ public sealed class RpcServer : IRpcHost
 
     private void RemovePeer(ulong clientId)
     {
-        if (_peers.TryRemove(clientId, out RpcPeer? peer))
+        RpcPeer? peer;
+        lock (_gate)
         {
-            peer.FaultPending((int)RpcErrorCode.Unavailable, "connection closed");
-            ClientDisconnected?.Invoke(peer);
+            if (!_peers.Remove(clientId, out peer))
+            {
+                return;
+            }
+
+            _snapshot = BuildSnapshot();
         }
+
+        peer.FaultPending((int)RpcErrorCode.Unavailable, "connection closed");
+        ClientDisconnected?.Invoke(peer);
     }
 
-    private RpcPeer[] SnapshotPeers()
+    // Builds the immutable peer array. Call under _gate.
+    private RpcPeer[] BuildSnapshot()
     {
-        var peers = new List<RpcPeer>(_peers.Count);
+        var peers = new RpcPeer[_peers.Count];
+        int index = 0;
         foreach (KeyValuePair<ulong, RpcPeer> pair in _peers)
         {
-            peers.Add(pair.Value);
+            peers[index] = pair.Value;
+            index++;
         }
 
-        return peers.ToArray();
-    }
-
-    private static Task<RpcResult<TResponse>> NoPeers<TResponse>()
-        where TResponse : struct
-    {
-        return Task.FromResult(
-            RpcResult<TResponse>.Failure((int)RpcErrorCode.Unavailable, "no peers"));
-    }
-
-    private static async Task<RpcResult<TResponse>> AggregateAsync<TRequest, TResponse>(
-        RpcPeer[] peers,
-        ulong method,
-        TRequest request,
-        TimeSpan? timeout,
-        CancellationToken cancellationToken)
-        where TRequest : struct
-        where TResponse : struct
-    {
-        var calls = new Task<RpcResult<TResponse>>[peers.Length];
-        for (int index = 0; index < peers.Length; index++)
-        {
-            calls[index] = peers[index].InvokeAsync<TRequest, TResponse>(
-                method, in request, timeout, cancellationToken);
-        }
-
-        RpcResult<TResponse> lastSuccess = default;
-        for (int index = 0; index < calls.Length; index++)
-        {
-            RpcResult<TResponse> result = await calls[index].ConfigureAwait(false);
-            if (!result.IsSuccess)
-            {
-                return result;
-            }
-
-            lastSuccess = result;
-        }
-
-        return lastSuccess;
-    }
-
-    private static async Task<RpcResult<TResponse>> AggregateStreamAsync<TRequest, TChunk, TResponse>(
-        RpcPeer[] peers,
-        ulong method,
-        TRequest request,
-        IChunkSink<TChunk> sink,
-        TimeSpan? timeout,
-        CancellationToken cancellationToken)
-        where TRequest : struct
-        where TChunk : struct
-        where TResponse : struct
-    {
-        var calls = new Task<RpcResult<TResponse>>[peers.Length];
-        for (int index = 0; index < peers.Length; index++)
-        {
-            calls[index] = peers[index].InvokeStreamAsync<TRequest, TChunk, TResponse>(
-                method, in request, sink, timeout, cancellationToken);
-        }
-
-        RpcResult<TResponse> lastSuccess = default;
-        for (int index = 0; index < calls.Length; index++)
-        {
-            RpcResult<TResponse> result = await calls[index].ConfigureAwait(false);
-            if (!result.IsSuccess)
-            {
-                return result;
-            }
-
-            lastSuccess = result;
-        }
-
-        return lastSuccess;
+        return peers;
     }
 }

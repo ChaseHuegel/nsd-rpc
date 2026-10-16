@@ -10,7 +10,7 @@ namespace NsdRpc;
 /// One RPC peer over one connection. Owns the envelope, the id space, and the
 /// pending calls. It knows nothing about handlers.
 /// </summary>
-public sealed class RpcPeer : IRpcHost
+public sealed class RpcPeer : IRpcHost, IRpcCaller
 {
     private const byte RpcVersion = 1;
 
@@ -42,6 +42,7 @@ public sealed class RpcPeer : IRpcHost
 
     private readonly RpcPeer[] _selfPeers;
     private readonly Action<object?> _onCallCancelled;
+    private IRpcHost _host;
 
     public RpcPeer(IRpcConnection connection, RpcOptions? options = null)
     {
@@ -53,16 +54,26 @@ public sealed class RpcPeer : IRpcHost
         _clientId = (connection as IServerConnection)?.ClientId ?? 0UL;
         _selfPeers = [this];
         _onCallCancelled = OnCallCancelled;
+        _host = this;
         _connection.Disconnected += OnDisconnected;
         _connection.FrameReceived += HandleFrame;
     }
 
     internal IRpcConnection Connection => _connection;
 
-    public IReadOnlyCollection<RpcPeer> Peers => _selfPeers;
+    public PeerSet Peers => new(_selfPeers);
 
     /// <summary>The client id the server assigned, or zero on the client side.</summary>
     public ulong ClientId => _clientId;
+
+    // The endpoint that owns this peer. RpcServer and RpcClient set it, so a
+    // handler reaches the peers through RpcContext.Host. It defaults to the
+    // peer itself for a bare peer.
+    internal IRpcHost Host
+    {
+        get => _host;
+        set => _host = value;
+    }
 
     internal bool IsServer => _isServer;
 

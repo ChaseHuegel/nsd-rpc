@@ -34,6 +34,6 @@ dotnet run --project samples/Chat.Raw
 - Both stream consumption paths: the callback sink and the session wrapper.
 - Cancellation: the client's token, the wire cancellation frame, and the
   server-side drop.
-- Notifications in both directions, and the broadcast pattern through the
-  server's `ClientConnected` and `ClientDisconnected` events.
+- Notifications in both directions, and the relay fan-out through
+  `context.Host.Peers` in the server handler.
 - The error model: a missing method returns `MethodNotFound` in the result.

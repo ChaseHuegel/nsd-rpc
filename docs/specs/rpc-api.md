@@ -168,10 +168,10 @@ The composition roots live in
 [NsdRpc/RpcServer.cs](../../NsdRpc/RpcServer.cs).
 
 ```csharp
-public sealed class RpcClient
+public sealed class RpcClient : IRpcHost, IRpcCaller
 {
     public RpcClient(IRpcConnection connection, RpcRegistry registry, RpcOptions? options = null);
-    // InvokeAsync, InvokeStreamAsync, Notify: same surface as RpcPeer.
+    // InvokeAsync, InvokeStreamAsync, Notify: the call surface of its one peer.
     public void HandleFrame(ReadOnlySpan<byte> frame);
     public void CheckTimeouts(long timestampNanos);
     public void Poll();
@@ -182,8 +182,7 @@ public sealed class RpcServer : IRpcHost
     public RpcServer(IRpcServerTransport transport, RpcRegistry registry, RpcOptions? options = null);
     public void Start();   // launches the accept loop. Call once.
     public RpcPeer? GetPeer(ulong clientId);
-    public IReadOnlyCollection<RpcPeer> Peers { get; }
-    // InvokeAsync, InvokeStreamAsync, and Notify: the broadcast surface.
+    public PeerSet Peers { get; }
     public void CheckTimeouts(long timestampNanos);
     public void Poll();
     public void Close();
@@ -196,27 +195,38 @@ public sealed class RpcServer : IRpcHost
   practice because it owns the id space.
 - `RpcServer` owns one peer per connection, keyed by `ClientId`. It accepts
   through the transport. It prunes dead peers and faults their calls.
+- `RpcServer` is not a caller. It exposes its peers. A caller selects a peer
+  from `Peers` or `GetPeer` and calls it. There is no broadcast.
 - `GetPeer` returns null for an unknown client id.
 - `ClientConnected` fires after the accept loop wires a peer.
   `ClientDisconnected` fires when a peer leaves, through a disconnect, a
-  prune, or a close. The events let a server broadcast to its clients.
+  prune, or a close.
 - Both types are plain constructible classes. The app owns their lifetime.
 
 ## IRpcHost
 
-`IRpcHost : IRpcCaller` adds `IReadOnlyCollection<RpcPeer> Peers`. `RpcPeer`
-and `RpcClient` expose a single peer. `RpcServer` exposes a snapshot of its
-live peers and broadcasts.
+`IRpcHost` exposes `PeerSet Peers`. `RpcPeer` and `RpcClient` expose one peer.
+`RpcServer` exposes an immutable snapshot of its live peers.
 
-`RpcServer` aggregation rules:
+`PeerSet` is a readonly value over an immutable array. Iterating it does not
+allocate. A default `PeerSet` is empty. A captured snapshot does not change
+when the live peers change.
 
-- `Notify` sends to every peer. It returns true when every peer accepted, and
-  false when there are no peers.
-- `InvokeAsync` calls every peer. The first failure in peer order wins. With
-  no failure, the last success wins. No peers fails with `Unavailable`.
-- `InvokeStreamAsync` fans every chunk into one sink or one session, then
-  aggregates the response like `InvokeAsync`.
-- The timeout and the token apply to each peer call.
+## Fan-out from a handler
+
+A handler reaches the peers through its context. `RpcContext.Host` is the
+endpoint that received the message. On the server it is the `RpcServer`, so
+`context.Host.Peers` is every connected client. Loop it to reach every peer:
+
+```csharp
+foreach (RpcPeer peer in context.Host.Peers)
+{
+    peer.Notify(chatMethod, in message);
+}
+```
+
+The handler holds no peer set, so one instance serves any server. To answer
+the caller alone, call `Respond` or `Stream` on the context.
 
 ## RpcContext
 
@@ -225,6 +235,7 @@ public readonly struct RpcContext
 {
     public IRpcConnection Connection { get; }
     public ulong ClientId { get; }
+    public IRpcHost Host { get; }
     public ulong Method { get; }
     public ulong RequestId { get; }
     public bool IsServer { get; }
@@ -241,6 +252,8 @@ public readonly struct RpcContext
   cancellation or a response.
 - `ClientId` is 0 on the client side. `IsServer` tells the handler which side
   it runs on.
+- `Host` is the endpoint that received the message. A handler fans out
+  through `Host.Peers`.
 
 ## Handlers
 

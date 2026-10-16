@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Chat;
 using NsdRpc;
 using NsdRpc.Tcp;
@@ -7,25 +6,15 @@ return await RunAsync();
 
 static async Task<int> RunAsync()
 {
-    // The server tracks its clients so the chat handler can relay to everyone.
-    var peers = new ConcurrentDictionary<ulong, RpcPeer>();
     var registry = new RpcRegistry();
     registry.Add(new ListUsersHandler());
-    registry.Add(new ChatRelayHandler(peers));
+    registry.Add(new ChatRelayHandler());
     registry.Freeze();
 
     var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
     var server = new RpcServer(transport, registry);
-    server.ClientConnected += peer =>
-    {
-        peers[peer.ClientId] = peer;
-        Console.WriteLine($"client {peer.ClientId} connected");
-    };
-    server.ClientDisconnected += peer =>
-    {
-        peers.TryRemove(peer.ClientId, out _);
-        Console.WriteLine($"client {peer.ClientId} disconnected");
-    };
+    server.ClientConnected += peer => Console.WriteLine($"client {peer.ClientId} connected");
+    server.ClientDisconnected += peer => Console.WriteLine($"client {peer.ClientId} disconnected");
     server.Start();
 
     RpcClient local = await ConnectAsync(transport.Port, string.Empty);
@@ -119,15 +108,14 @@ public sealed class ListUsersHandler : IRpcHandler<ListUsersRequest, ListUsersRe
 }
 
 // A notification handler. The response type is unused because nothing is sent
-// back for a notification.
+// back for a notification. It relays through the context, so it holds no state.
 [RpcMethod(Methods.ChatMessage)]
-public sealed class ChatRelayHandler(ConcurrentDictionary<ulong, RpcPeer> peers)
-    : IRpcHandler<ChatMessage, ListUsersResponse>
+public sealed class ChatRelayHandler : IRpcHandler<ChatMessage, ListUsersResponse>
 {
     public ValueTask<RpcResult<ListUsersResponse>> ExecuteAsync(
         ChatMessage message, RpcContext context, CancellationToken cancellationToken)
     {
-        foreach (RpcPeer peer in peers.Values)
+        foreach (RpcPeer peer in context.Host.Peers)
         {
             peer.Notify(Methods.ChatMessage, in message);
         }

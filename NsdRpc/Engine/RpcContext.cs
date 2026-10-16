@@ -29,6 +29,13 @@ public readonly struct RpcContext
     /// <summary>True when the handler runs on the server side.</summary>
     public bool IsServer => _peer.IsServer;
 
+    /// <summary>
+    /// The endpoint that received the message. Send to its peers to fan out.
+    /// On the server it is the <see cref="RpcServer"/>. On the client it is
+    /// the <see cref="RpcClient"/>.
+    /// </summary>
+    public IRpcHost Host => _peer.Host;
+
     public void Stream<TChunk>(in TChunk chunk)
         where TChunk : struct
     {

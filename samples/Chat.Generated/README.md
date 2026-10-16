@@ -16,8 +16,8 @@ dotnet run --project samples/Chat.Generated
   and registers it with `RpcRegistry.AddService`.
 - The client subclasses `ChatHandler` too, but overrides only `OnNotifyChat`
   to print incoming messages — a partial implementation of the same base.
-- The relay rebroadcasts through `new ChatClient(peer)` per peer, using the
-  generated client's `RpcPeer` constructor.
+- The relay fans out through `new ChatClient(peer)` per peer in
+  `context.Host.Peers`, using the generated client's `RpcPeer` constructor.
 - The project references `NsdRpc.Generators` as an analyzer
   (`OutputItemType="Analyzer"`), which is exactly how a consumer wires it.
 

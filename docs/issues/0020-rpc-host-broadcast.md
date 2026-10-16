@@ -25,3 +25,6 @@ collection for targeting a subset.
 `IRpcHost` adds `Peers`. `RpcPeer` and `RpcClient` expose one peer.
 `RpcServer` snapshots its peers and broadcasts. The aggregation rules and the
 no-peer behavior are in [rpc-api](../../specs/rpc-api.md).
+
+Superseded by [0055](0055-server-peer-targeting.md): the server broadcast
+surface is removed. `RpcServer` exposes its peers and the caller selects one.

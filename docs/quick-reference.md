@@ -46,12 +46,12 @@ One server endpoint: one peer per accepted connection.
 | `Start()` | Launches the accept loop. Call once. |
 | `Close()` | Stops accepting and faults every pending call. |
 | `GetPeer(ulong clientId)` | Returns the peer for one client, or null. |
-| `Peers` | The live peers. A snapshot. |
+| `Peers` | The live peers as a `PeerSet`. A snapshot. |
 | `ClientConnected` / `ClientDisconnected` | Events. Fire when a peer is wired or leaves. |
-| `InvokeAsync` / `InvokeStreamAsync` / `Notify` | The broadcast surface. Deliver to every peer. |
 | `CheckTimeouts(long timestampNanos)` / `Poll()` | Enforce the deadlines for every peer. |
 
-Broadcast aggregation rules live in [rpc-api](specs/rpc-api.md).
+`RpcServer` is not a caller. Select a peer from `Peers` or `GetPeer` and call
+it. To reach every peer, loop the set. See [rpc-api](specs/rpc-api.md).
 
 ### RpcPeer
 
@@ -71,8 +71,9 @@ The engine for one connection. `RpcClient` and `RpcServer` expose it.
 
 | Type | Purpose |
 |---|---|
-| `IRpcCaller` | The call surface (`InvokeAsync`, `InvokeStreamAsync`, `Notify`) shared by `RpcClient` and `RpcPeer`. |
-| `IRpcHost : IRpcCaller` | Adds `Peers`. `RpcServer` exposes the live peers and broadcasts. |
+| `IRpcCaller` | The call surface (`InvokeAsync`, `InvokeStreamAsync`, `Notify`) implemented by `RpcClient` and `RpcPeer`. |
+| `IRpcHost` | Exposes `PeerSet Peers`. `RpcServer` exposes the live peers. |
+| `PeerSet` | An immutable peer snapshot. `foreach` does not allocate. |
 
 ## Calls and results
 
@@ -95,6 +96,7 @@ The handle for one inbound message. A deferred handler keeps it.
 |---|---|
 | `Connection` | The connection the message arrived on. |
 | `ClientId` | The server-assigned id. Zero on the client side. |
+| `Host` | The endpoint that received the message. Fan out through `Host.Peers`. |
 | `Method` | The method id of the inbound message. |
 | `RequestId` | The request id. Zero for a notification. |
 | `IsServer` | True when the handler runs on the server side. |

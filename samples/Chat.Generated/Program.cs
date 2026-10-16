@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Chat;
 using NsdRpc;
 using NsdRpc.Tcp;
@@ -7,23 +6,14 @@ return await RunAsync();
 
 static async Task<int> RunAsync()
 {
-    var peers = new ConcurrentDictionary<ulong, RpcPeer>();
     var registry = new RpcRegistry();
-    registry.AddService(new MyChatHandler(peers));
+    registry.AddService(new MyChatHandler());
     registry.Freeze();
 
     var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
     var server = new RpcServer(transport, registry);
-    server.ClientConnected += peer =>
-    {
-        peers[peer.ClientId] = peer;
-        Console.WriteLine($"client {peer.ClientId} connected");
-    };
-    server.ClientDisconnected += peer =>
-    {
-        peers.TryRemove(peer.ClientId, out _);
-        Console.WriteLine($"client {peer.ClientId} disconnected");
-    };
+    server.ClientConnected += peer => Console.WriteLine($"client {peer.ClientId} connected");
+    server.ClientDisconnected += peer => Console.WriteLine($"client {peer.ClientId} disconnected");
     server.Start();
 
     RpcClient local = await ConnectAsync(transport.Port, string.Empty);
@@ -94,7 +84,8 @@ static async Task<RpcClient> ConnectAsync(int port, string prefix)
 }
 
 // The server implements every handler: stream the users and relay chat.
-public sealed class MyChatHandler(ConcurrentDictionary<ulong, RpcPeer> peers) : ChatHandler
+// It relays through the context, so it holds no state.
+public sealed class MyChatHandler : ChatHandler
 {
     public override async ValueTask<RpcResult<ListUsersResponse>> ListUsersAsync(
         ListUsersRequest request, RpcContext context, CancellationToken cancellationToken)
@@ -111,7 +102,7 @@ public sealed class MyChatHandler(ConcurrentDictionary<ulong, RpcPeer> peers) : 
 
     public override void OnNotifyChat(ChatMessage message, RpcContext context, CancellationToken cancellationToken)
     {
-        foreach (RpcPeer peer in peers.Values)
+        foreach (RpcPeer peer in context.Host.Peers)
         {
             new ChatClient(peer).NotifyChat(message);
         }
