@@ -87,7 +87,7 @@ descriptions do not.
 
 - Subject: imperative mood, capitalized, at most 72 characters. No prefixes
   (`feat:`/`fix:`), no emojis, no trailing period.
-- Body: say what changed and why. State the motivation and the tradeoffs.
+- Body: say nothing. Keep it empty.
 - One commit per change. Do not mix unrelated changes.
 - When a change closes a local issue, append its number to the subject.
   Example: `Add handshake message bounds checking #1`.
