@@ -323,6 +323,7 @@ public sealed class RpcPeer : IRpcCaller
         {
             RpcLog.Drop("unknown protocol version");
             FaultPending((int)RpcErrorCode.Unavailable, "protocol version mismatch");
+            _connection.Close();
             return;
         }
 

@@ -1,7 +1,7 @@
 # Bug: Envelope version mismatch does not close the connection
 
 - Type: bug
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -18,6 +18,13 @@ transport by contract today.
 
 ## Acceptance criteria
 
-- [ ] A version mismatch ends the connection, or the doc states the fault-only behavior.
-- [ ] The chosen behavior has a test.
-- [ ] The dead connection does not leak resources.
+- [x] A version mismatch ends the connection, or the doc states the fault-only behavior.
+- [x] The chosen behavior has a test.
+- [x] The dead connection does not leak resources.
+
+## Resolution
+
+A version mismatch faults every pending call and closes the connection.
+`IRpcConnection` gained `Close`. The TCP server and client connections
+implement it, and so do the test and benchmark connections. The protocol doc
+keeps the close rule.

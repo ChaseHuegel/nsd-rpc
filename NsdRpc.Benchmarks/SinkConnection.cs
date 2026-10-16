@@ -6,6 +6,10 @@ internal sealed class SinkConnection : IRpcConnection
 {
     public bool IsConnected => true;
 
+    public void Close()
+    {
+    }
+
     public event Action Disconnected
     {
         add { }

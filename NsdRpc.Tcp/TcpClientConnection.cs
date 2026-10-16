@@ -22,6 +22,11 @@ public sealed class TcpClientConnection : IClientConnection
 
     public bool IsConnected => _connection?.IsConnected ?? false;
 
+    public void Close()
+    {
+        _connection?.Close();
+    }
+
     public event Action Disconnected
     {
         add => _disconnectedHandlers += value;

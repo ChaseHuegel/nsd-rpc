@@ -21,6 +21,11 @@ internal sealed class InMemoryServerConnection : IServerConnection
 
     public bool IsConnected => _inner.IsConnected;
 
+    public void Close()
+    {
+        _inner.Close();
+    }
+
     public event Action Disconnected
     {
         add => _inner.Disconnected += value;

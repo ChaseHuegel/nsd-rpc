@@ -24,6 +24,7 @@ in [NsdRpc/RpcOptions.cs](../../NsdRpc/RpcOptions.cs).
 public interface IRpcConnection
 {
     bool IsConnected { get; }
+    void Close();
     bool TrySend(ReadOnlySpan<byte> frame);
     event Action Disconnected;
     event RpcFrameHandler FrameReceived;
@@ -49,6 +50,8 @@ public interface IRpcServerTransport
 
 Rules:
 
+- `Close` ends the connection and fires `Disconnected` once. The peer closes
+  the connection when a frame carries another protocol version.
 - `TrySend` copies the frame before it returns. It returns false when the
   frame was rejected: a closed connection or a full queue.
 - `FrameReceived` fires for each complete frame from the transport's receive

@@ -23,6 +23,11 @@ internal sealed class InMemoryConnection : IRpcConnection
 
     public bool IsConnected => IsConnectedValue;
 
+    public void Close()
+    {
+        Disconnect();
+    }
+
     public event Action Disconnected
     {
         add => _disconnectedHandlers += value;

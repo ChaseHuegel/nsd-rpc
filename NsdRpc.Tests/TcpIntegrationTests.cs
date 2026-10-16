@@ -349,6 +349,34 @@ public sealed class TcpIntegrationTests
     }
 
     [Fact]
+    public async Task VersionMismatchClosesTheServerConnection()
+    {
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        var server = new RpcServer(transport, new RpcRegistry());
+        var connected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.ClientConnected += _ => connected.TrySetResult();
+        server.Start();
+
+        using var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        await socket.ConnectAsync(IPAddress.Loopback, transport.Port);
+        await ReadFrameAsync(socket);
+        await SendFrameAsync(socket, new Handshake(1).Serialize());
+        await connected.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // A frame with version 2 ends the connection.
+        var envelope = new Envelope(2, (byte)RpcMessageKind.Notification, 0UL, 1UL, null, null);
+        await SendFrameAsync(socket, envelope.Serialize());
+
+        byte[] buffer = new byte[1];
+        int read = await socket
+            .ReceiveAsync(buffer, SocketFlags.None)
+            .WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(0, read);
+        server.Close();
+    }
+
+    [Fact]
     public async Task MaximumPayloadRoundTripsAtTheDefaultCap()
     {
         var registry = new RpcRegistry();

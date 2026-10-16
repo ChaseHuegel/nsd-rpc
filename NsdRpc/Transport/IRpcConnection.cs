@@ -8,6 +8,9 @@ public interface IRpcConnection
     /// <summary>True while the connection can send and receive.</summary>
     bool IsConnected { get; }
 
+    /// <summary>Closes the connection. Fires Disconnected once.</summary>
+    void Close();
+
     /// <summary>
     /// Queues one complete frame for sending. Copies the bytes before it returns.
     /// A frame is a 4-byte little-endian length prefix and the envelope bytes.

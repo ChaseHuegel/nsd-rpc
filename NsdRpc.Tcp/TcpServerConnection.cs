@@ -52,7 +52,7 @@ public sealed class TcpServerConnection : IServerConnection
         _inner.StartReceiving();
     }
 
-    internal void Close()
+    public void Close()
     {
         _inner.Close();
     }

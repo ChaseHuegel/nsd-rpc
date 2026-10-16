@@ -480,6 +480,22 @@ public sealed class RpcPeerTests
     }
 
     [Fact]
+    public async Task VersionMismatchClosesTheConnection()
+    {
+        var connection = new InMemoryConnection();
+        var peer = new RpcPeer(connection);
+        Task<RpcResult<Handshake>> call =
+            peer.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1));
+
+        var envelope = new Envelope(2, (byte)RpcMessageKind.Notification, 0UL, EchoMethod, null, null);
+        RpcTestHelpers.Deliver(peer, in envelope);
+
+        Assert.False(connection.IsConnected);
+        RpcResult<Handshake> result = await call;
+        Assert.Equal((int)RpcErrorCode.Unavailable, result.ErrorCode);
+    }
+
+    [Fact]
     public async Task PeerAcceptsAFrameAtTheCapAndDropsOneAboveIt()
     {
         // A null-payload notification envelope is 26 bytes, so the frame is 30.
