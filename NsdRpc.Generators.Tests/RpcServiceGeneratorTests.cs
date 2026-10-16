@@ -301,6 +301,7 @@ public sealed class RpcServiceGeneratorTests
             {
                 public List<byte[]> Frames { get; } = new List<byte[]>();
                 public bool IsConnected => true;
+                public void Close() { }
                 public event Action Disconnected { add { } remove { } }
                 public event RpcFrameHandler FrameReceived { add { } remove { } }
                 public bool TrySend(ReadOnlySpan<byte> frame)
@@ -434,6 +435,7 @@ public sealed class RpcServiceGeneratorTests
             {
                 public List<byte[]> Frames { get; } = new List<byte[]>();
                 public bool IsConnected => true;
+                public void Close() { }
                 public event Action Disconnected { add { } remove { } }
                 public event RpcFrameHandler FrameReceived { add { } remove { } }
                 public bool TrySend(ReadOnlySpan<byte> frame)
