@@ -1,3 +1,4 @@
+using System.Buffers;
 using NsdRpc;
 using NsdRpc.Wire;
 
@@ -567,6 +568,18 @@ public sealed class RpcPeerTests
 
         RpcResult<Handshake> result = await call;
         Assert.Equal((int)RpcErrorCode.RequestTimeout, result.ErrorCode);
+    }
+
+    [Fact]
+    public void PeerTransfersFrameOwnershipWhenTheTransportSupportsIt()
+    {
+        var connection = new OwnedSinkConnection();
+        var peer = new RpcPeer(connection);
+
+        Assert.True(peer.Notify(EchoMethod));
+
+        Assert.Equal(1, connection.OwnedCount);
+        Assert.Equal(0, connection.CopyCount);
     }
 
     [Fact]
@@ -1465,6 +1478,45 @@ public sealed class RpcPeerTests
 
         RpcResult<Handshake> result = await call;
         Assert.Equal((int)RpcErrorCode.InternalError, result.ErrorCode);
+    }
+
+    // One connection that accepts frame ownership.
+    private sealed class OwnedSinkConnection : IRpcConnection, IOwnedFrameSink
+    {
+        public int OwnedCount { get; private set; }
+
+        public int CopyCount { get; private set; }
+
+        public bool IsConnected => true;
+
+        public void Close()
+        {
+        }
+
+        public event Action? Disconnected
+        {
+            add { }
+            remove { }
+        }
+
+        public event RpcFrameHandler? FrameReceived
+        {
+            add { }
+            remove { }
+        }
+
+        public bool TrySend(ReadOnlySpan<byte> frame)
+        {
+            CopyCount++;
+            return true;
+        }
+
+        public bool TrySendOwned(byte[] frame, int length)
+        {
+            OwnedCount++;
+            ArrayPool<byte>.Shared.Return(frame, clearArray: true);
+            return true;
+        }
     }
 
     // Delivers malformed input, then a probe notification. Dispatch is serial,

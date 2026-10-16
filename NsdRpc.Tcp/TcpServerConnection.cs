@@ -7,7 +7,7 @@ namespace NsdRpc.Tcp;
 /// <summary>
 /// A server TCP connection. The server transport creates it at accept.
 /// </summary>
-public sealed class TcpServerConnection : IServerConnection
+public sealed class TcpServerConnection : IServerConnection, IOwnedFrameSink
 {
     private readonly TcpConnection _inner;
 
@@ -55,5 +55,10 @@ public sealed class TcpServerConnection : IServerConnection
     public void Close()
     {
         _inner.Close();
+    }
+
+    bool IOwnedFrameSink.TrySendOwned(byte[] frame, int length)
+    {
+        return _inner.TrySendOwned(frame, length);
     }
 }

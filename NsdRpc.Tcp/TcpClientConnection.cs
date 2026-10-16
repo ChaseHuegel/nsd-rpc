@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Net.Sockets;
 using NsdRpc;
 
@@ -6,7 +7,7 @@ namespace NsdRpc.Tcp;
 /// <summary>
 /// A client TCP connection. Connect, then use it with RpcClient.
 /// </summary>
-public sealed class TcpClientConnection : IClientConnection
+public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink
 {
     private readonly RpcOptions _rpcOptions;
     private readonly TcpOptions _tcpOptions;
@@ -25,6 +26,17 @@ public sealed class TcpClientConnection : IClientConnection
     public void Close()
     {
         _connection?.Close();
+    }
+
+    bool IOwnedFrameSink.TrySendOwned(byte[] frame, int length)
+    {
+        if (_connection == null)
+        {
+            ArrayPool<byte>.Shared.Return(frame, clearArray: true);
+            return false;
+        }
+
+        return _connection.TrySendOwned(frame, length);
     }
 
     public event Action Disconnected
