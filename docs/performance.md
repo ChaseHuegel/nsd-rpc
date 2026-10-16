@@ -74,3 +74,31 @@ message allocation from issue [0045](issues/0045-trace-switch-guard.md).
 The peer construction row shows the scratch array from issue
 [0028](issues/0028-lazy-peer-timeout-scratch.md). Compare later runs on the
 same machine against this table.
+
+## Second run
+
+Second run: 2026-10-16, commit `20b14e4`, the same machine and
+BenchmarkDotNet version. Every Active Sprint performance issue is fixed.
+
+| Benchmark | Baseline | Second run | Change |
+|---|---:|---:|---:|
+| `SerializeSmallPayload` | 44.15 ns | 45.13 ns | +2% |
+| `SerializeMaximumPayload` | 48.58 μs | 47.95 μs | −1% |
+| `DeserializeSmallPayload` | 94.96 ns / 88 B | 87.71 ns / 88 B | −8% |
+| `DeserializeMaximumPayload` | 84.47 μs / 65,560 B | 69.57 μs / 65,560 B | Within the baseline spread |
+| `InvokeRoundTrip` | 3.938 μs / 624 B | 3.019 μs / 616 B | −23% |
+| `StreamRoundTrip` | 12.00 μs / 2.53 KB | 6.987 μs / 2.16 KB | −42% |
+| `CheckTimeoutsBelowEveryDeadline` | 1.227 μs | 1.201 ns | −99.9% |
+| `HandleUnknownKind` | 52.25 ns / 168 B | 19.95 ns / 0 B | −62% |
+| `ConstructDefaultPeer` | 453.4 ns / 8.73 KB | 89.45 ns / 800 B | −91% bytes |
+| `RoundTripHandshake` | 50.67 μs / 945 B | 39.11 μs / 677 B | −23% |
+| `RoundTripBlob` | 92.56 μs / 33,774 B | 69.82 μs / 25,320 B | −25% |
+
+The maximum-payload codec is unchanged. Issue
+[0027](issues/0027-generated-payload-memcpy.md) tracks the upstream copy
+loop, so its two rows differ by less than the baseline spread.
+
+The send path dropped about 8.4 KB per 4-kilobyte round trip. The first
+comparison run missed it: the peer holds the public `TcpClientConnection` or
+`TcpServerConnection`, and the wrappers did not forward `IOwnedFrameSink`.
+Commit `20b14e4` fixed the wrappers and the drop appeared.
