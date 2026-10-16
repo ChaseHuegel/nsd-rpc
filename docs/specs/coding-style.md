@@ -46,9 +46,11 @@ debt. Do it right the first time.
   into liveness bugs.
 - Public API validates arguments with guard clauses that throw. Example:
   `ArgumentNullException.ThrowIfNull`.
-- Internal invariants use an always-on assert helper. The helper throws on
-  failure in every build. Debug-only asserts do not qualify. The helper does
-  not exist yet. The first library code change must add it.
+- Internal invariants use the always-on assert helper in
+  [NsdRpc/Invariant.cs](../../NsdRpc/Invariant.cs:7). `Invariant.That` checks
+  a condition, `Invariant.NotNull` checks a reference, and `Invariant.Fail`
+  always throws. The helper throws on failure in every build. Debug-only
+  asserts do not qualify.
 - Assert the positive space you expect and the negative space you do not
   expect.
 - Pair assertions. Assert a property right before you write data and right

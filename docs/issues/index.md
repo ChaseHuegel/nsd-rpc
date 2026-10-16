@@ -8,7 +8,7 @@ add or work an issue.
 
 ### Bug
 
-- [ ] [Coding style says the assert helper does not exist](/docs/issues/0054-coding-style-assert-helper-text.md) — the helper ships in `Invariant.cs`.
+- [x] [Coding style says the assert helper does not exist](/docs/issues/0054-coding-style-assert-helper-text.md) — the helper ships in `Invariant.cs`.
 
 ### Improvement
 

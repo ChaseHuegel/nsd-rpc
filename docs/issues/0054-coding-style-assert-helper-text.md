@@ -1,7 +1,7 @@
 # Bug: Coding style says the assert helper does not exist
 
 - Type: bug
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -13,6 +13,13 @@ and that the first library code change must add it
 
 ## Acceptance criteria
 
-- [ ] The assertions section names `NsdRpc/Invariant.cs` and its methods.
-- [ ] It keeps the always-on rule.
-- [ ] No sentence in the section claims the helper is missing.
+- [x] The assertions section names `NsdRpc/Invariant.cs` and its methods.
+- [x] It keeps the always-on rule.
+- [x] No sentence in the section claims the helper is missing.
+
+## Resolution
+
+The assertions section now points at
+[NsdRpc/Invariant.cs](../../NsdRpc/Invariant.cs:7) and names `Invariant.That`,
+`Invariant.NotNull`, and `Invariant.Fail`. It keeps the always-on rule and no
+sentence claims the helper is missing.
