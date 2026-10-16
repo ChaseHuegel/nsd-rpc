@@ -1,7 +1,7 @@
 # Bug: TcpServerTransport leaks accepted connections
 
 - Type: bug
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem

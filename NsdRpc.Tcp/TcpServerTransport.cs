@@ -29,6 +29,19 @@ public sealed class TcpServerTransport : IRpcServerTransport
     /// <summary>The bound port. Useful when TcpOptions.Port is zero.</summary>
     public int Port => ((IPEndPoint)EnsureListener().LocalEndpoint).Port;
 
+    // The live accepted connections. Tests use it to prove the list stays
+    // bounded.
+    internal int AcceptedConnectionCount
+    {
+        get
+        {
+            lock (_acceptedLock)
+            {
+                return _accepted.Count;
+            }
+        }
+    }
+
     [SuppressMessage(
         "Design",
         "CA1031",
@@ -63,6 +76,9 @@ public sealed class TcpServerTransport : IRpcServerTransport
             ulong clientId = checked(_nextClientId++);
             var connection = new TcpServerConnection(
                 socket, _rpcOptions, _tcpOptions, clientId, socket.RemoteEndPoint);
+            // A disconnect removes the connection from the list. The list stays
+            // bounded by the live connection count.
+            connection.Disconnected += () => RemoveAccepted(connection);
             lock (_acceptedLock)
             {
                 _accepted.Add(connection);
@@ -74,12 +90,8 @@ public sealed class TcpServerTransport : IRpcServerTransport
             }
             catch (Exception)
             {
+                // Close fires Disconnected, and the handler removes the entry.
                 connection.Close();
-                lock (_acceptedLock)
-                {
-                    _accepted.Remove(connection);
-                }
-
                 continue;
             }
 
@@ -92,14 +104,24 @@ public sealed class TcpServerTransport : IRpcServerTransport
     {
         _closed = true;
         _listener?.Stop();
+        TcpServerConnection[] connections;
         lock (_acceptedLock)
         {
-            foreach (TcpServerConnection connection in _accepted)
-            {
-                connection.Close();
-            }
-
+            connections = _accepted.ToArray();
             _accepted.Clear();
+        }
+
+        foreach (TcpServerConnection connection in connections)
+        {
+            connection.Close();
+        }
+    }
+
+    private void RemoveAccepted(TcpServerConnection connection)
+    {
+        lock (_acceptedLock)
+        {
+            _accepted.Remove(connection);
         }
     }
 

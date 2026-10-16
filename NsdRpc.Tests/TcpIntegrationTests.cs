@@ -318,6 +318,68 @@ public sealed class TcpIntegrationTests
         Assert.Equal((int)RpcErrorCode.Unavailable, result.ErrorCode);
     }
 
+    [Fact]
+    public async Task DisconnectedClientLeavesTheAcceptedList()
+    {
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        Task<IServerConnection?> accept = transport.AcceptAsync();
+        using Socket socket = await ConnectRawAsync(transport);
+        IServerConnection serverSide = (await accept)!;
+        Assert.Equal(1, transport.AcceptedConnectionCount);
+
+        var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        serverSide.Disconnected += () => removed.TrySetResult();
+        socket.Dispose();
+
+        await removed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(0, transport.AcceptedConnectionCount);
+        transport.Close();
+    }
+
+    [Fact]
+    public async Task RepeatedConnectAndDisconnectKeepsTheAcceptedListBounded()
+    {
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        for (int cycle = 0; cycle < 5; cycle++)
+        {
+            Task<IServerConnection?> accept = transport.AcceptAsync();
+            using Socket socket = await ConnectRawAsync(transport);
+            IServerConnection serverSide = (await accept)!;
+            var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            serverSide.Disconnected += () => removed.TrySetResult();
+            socket.Dispose();
+            await removed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        }
+
+        Assert.Equal(0, transport.AcceptedConnectionCount);
+        transport.Close();
+    }
+
+    [Fact]
+    public async Task CloseRemovesAcceptedConnections()
+    {
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        Task<IServerConnection?> accept = transport.AcceptAsync();
+        using Socket socket = await ConnectRawAsync(transport);
+        _ = await accept;
+        Assert.Equal(1, transport.AcceptedConnectionCount);
+
+        transport.Close();
+
+        Assert.Equal(0, transport.AcceptedConnectionCount);
+    }
+
+    // A raw client socket that finishes the handshake and then disconnects on
+    // Dispose. It exercises the accepted-list removal without an RpcClient.
+    private static async Task<Socket> ConnectRawAsync(TcpServerTransport transport)
+    {
+        var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        await socket.ConnectAsync(IPAddress.Loopback, transport.Port);
+        await ReadFrameAsync(socket);
+        await SendFrameAsync(socket, new Handshake(1).Serialize());
+        return socket;
+    }
+
     private static async Task<byte[]> ReadFrameAsync(Socket socket)
     {
         byte[] header = new byte[4];
