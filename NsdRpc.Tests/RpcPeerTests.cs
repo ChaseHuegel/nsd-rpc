@@ -624,6 +624,29 @@ public sealed class RpcPeerTests
     }
 
     [Fact]
+    public void InvokeWithACancellableTokenAllocatesABoundedAmount()
+    {
+        var peer = new RpcPeer(new InMemoryConnection());
+        using var source = new CancellationTokenSource();
+
+        // Warm up.
+        _ = peer.InvokeAsync<Handshake, Handshake>(
+            EchoMethod, new Handshake(1), cancellationToken: source.Token);
+        _ = peer.InvokeAsync<Handshake, Handshake>(
+            EchoMethod, new Handshake(1), cancellationToken: source.Token);
+
+        long allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
+        _ = peer.InvokeAsync<Handshake, Handshake>(
+            EchoMethod, new Handshake(1), cancellationToken: source.Token);
+        long allocatedAfter = GC.GetAllocatedBytesForCurrentThread();
+
+        // The delegate is cached. The registration node is tolerated.
+        Assert.True(
+            allocatedAfter - allocatedBefore <= 1536,
+            "allocated " + (allocatedAfter - allocatedBefore));
+    }
+
+    [Fact]
     public void InvokeSetupAllocatesThePendingCallAndThePayload()
     {
         // A connection with no peer: the call stays pending and the send path

@@ -41,6 +41,7 @@ public sealed class RpcPeer : IRpcHost
     private RpcDispatchHook? _dispatchHook;
 
     private readonly RpcPeer[] _selfPeers;
+    private readonly Action<object?> _onCallCancelled;
 
     public RpcPeer(IRpcConnection connection, RpcOptions? options = null)
     {
@@ -51,6 +52,7 @@ public sealed class RpcPeer : IRpcHost
         _isServer = connection is IServerConnection;
         _clientId = (connection as IServerConnection)?.ClientId ?? 0UL;
         _selfPeers = [this];
+        _onCallCancelled = OnCallCancelled;
         _connection.Disconnected += OnDisconnected;
         _connection.FrameReceived += HandleFrame;
     }
@@ -123,7 +125,7 @@ public sealed class RpcPeer : IRpcHost
 
         if (cancellationToken.CanBeCanceled)
         {
-            pending.Registration = cancellationToken.Register(OnCallCancelled, pending);
+            pending.Registration = cancellationToken.Register(_onCallCancelled, pending);
         }
 
         if (!pending.Cancelled)
@@ -183,7 +185,7 @@ public sealed class RpcPeer : IRpcHost
 
         if (cancellationToken.CanBeCanceled)
         {
-            pending.Registration = cancellationToken.Register(OnCallCancelled, pending);
+            pending.Registration = cancellationToken.Register(_onCallCancelled, pending);
         }
 
         if (!pending.Cancelled)
@@ -244,7 +246,7 @@ public sealed class RpcPeer : IRpcHost
 
         if (cancellationToken.CanBeCanceled)
         {
-            pending.Registration = cancellationToken.Register(OnCallCancelled, pending);
+            pending.Registration = cancellationToken.Register(_onCallCancelled, pending);
         }
 
         if (!pending.Cancelled)

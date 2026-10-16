@@ -1,7 +1,7 @@
 # Improvement: Cache the call-cancelled delegate in RpcPeer
 
 - Type: improvement
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -23,7 +23,14 @@ argument. One delegate in a field serves every call.
 
 ## Acceptance criteria
 
-- [ ] `RpcPeer` creates the callback delegate once and reuses it for every registration.
-- [ ] A test measures the allocations of a warmed `InvokeAsync` call with a cancellable token and asserts the recorded bound.
-- [ ] The cancellation tests pass unchanged.
-- [ ] A token that fires between the add and the send still cancels the call. The existing race tests pass unchanged.
+- [x] `RpcPeer` creates the callback delegate once and reuses it for every registration.
+- [x] A test measures the allocations of a warmed `InvokeAsync` call with a cancellable token and asserts the recorded bound.
+- [x] The cancellation tests pass unchanged.
+- [x] A token that fires between the add and the send still cancels the call. The existing race tests pass unchanged.
+
+## Resolution
+
+`RpcPeer` stores the `OnCallCancelled` delegate in a field and passes it to
+every registration. The allocation test measures a warmed call with a
+cancellable token and asserts a bound of 1,536 bytes. The registration node
+is the tolerated allocation.
