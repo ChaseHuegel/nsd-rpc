@@ -23,6 +23,15 @@ public sealed class RpcResultTests
     }
 
     [Fact]
+    public void DefaultResultReportsAnEmptyMessage()
+    {
+        RpcResult<Handshake> result = default;
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(string.Empty, result.ErrorMessage);
+    }
+
+    [Fact]
     public void FailureKeepsTheCodeAndMessage()
     {
         RpcResult<Handshake> result = RpcResult<Handshake>.Failure(-32100, "app code");

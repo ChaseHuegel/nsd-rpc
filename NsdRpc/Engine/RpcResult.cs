@@ -26,7 +26,7 @@ public readonly struct RpcResult<T>
     public int ErrorCode => _errorCode;
 
     /// <summary>The error message. Empty on success.</summary>
-    public string ErrorMessage => _errorMessage;
+    public string ErrorMessage => _errorMessage ?? string.Empty;
 
     public static RpcResult<T> Success(T value)
     {

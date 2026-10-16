@@ -1,7 +1,7 @@
 # Bug: default(RpcResult<T>).ErrorMessage is null
 
 - Type: bug
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -15,5 +15,10 @@ zero-initialized result is the only source of the null value.
 
 ## Acceptance criteria
 
-- [ ] A default result returns an empty message, or the contract states the null case.
-- [ ] A test pins the chosen behavior.
+- [x] A default result returns an empty message, or the contract states the null case.
+- [x] A test pins the chosen behavior.
+
+## Resolution
+
+`ErrorMessage` returns `string.Empty` when the backing field is null. A
+default result keeps the non-null contract.
