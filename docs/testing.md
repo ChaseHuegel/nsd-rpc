@@ -92,6 +92,10 @@ The transport tests pin the TCP layer:
   the disconnect paths and their reasons, the idle timeout and its reset on a read, the per-read
   receive buffer rent and return, the idle connection holding no receive
   buffer, and the decoder idle shrink gate and no-thrash rule.
+- [ConnectionStatsTests.cs](../NsdRpc.Tests/ConnectionStatsTests.cs:9) pins the
+  exact counters for a known exchange, the queue depth and peak under a
+  stalled read, the concurrent rejected-send count, and the peer default
+  without the capability.
 
 ## Allocation coverage
 

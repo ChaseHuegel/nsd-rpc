@@ -7,7 +7,7 @@ namespace NsdRpc.Tcp;
 /// <summary>
 /// A client TCP connection. Connect, then use it with RpcClient.
 /// </summary>
-public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink
+public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink, IRpcConnectionStats
 {
     private readonly RpcOptions _rpcOptions;
     private readonly TcpOptions _tcpOptions;
@@ -23,6 +23,8 @@ public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink
     }
 
     public bool IsConnected => _connection?.IsConnected ?? false;
+
+    public RpcConnectionStats Stats => _connection?.Stats ?? default;
 
     public void Close(RpcDisconnectReason reason = RpcDisconnectReason.LocalClose)
     {

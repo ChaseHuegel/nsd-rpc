@@ -11,7 +11,7 @@ namespace NsdRpc.Tcp;
 // loop pushes complete frames. A bounded send queue drains on demand. The
 // handshake runs before StartReceiving, so the RPC engine only ever sees
 // envelope frames.
-internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
+internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink, IRpcConnectionStats
 {
     private readonly Socket _socket;
     private readonly TcpFrameDecoder _decoder;
@@ -29,6 +29,13 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
     private Action<RpcDisconnectReason>? _disconnectedHandlers;
     private RpcFrameHandler? _frameReceivedHandlers;
     private int _queuedBytes;
+    private int _peakQueuedBytes;
+    private long _packetsSent;
+    private long _packetsReceived;
+    private long _bytesSent;
+    private long _bytesReceived;
+    private long _writes;
+    private long _rejectedFrames;
     private bool _sending;
     private bool _receiving;
     private int _disconnected;
@@ -70,6 +77,16 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
     // The queued send bytes. Tests read it to pin the backlog policy.
     internal int QueuedBytes => Volatile.Read(ref _queuedBytes);
 
+    public RpcConnectionStats Stats => new(
+        Interlocked.Read(ref _packetsSent),
+        Interlocked.Read(ref _packetsReceived),
+        Interlocked.Read(ref _bytesSent),
+        Interlocked.Read(ref _bytesReceived),
+        Volatile.Read(ref _queuedBytes),
+        Volatile.Read(ref _peakQueuedBytes),
+        Interlocked.Read(ref _writes),
+        Interlocked.Read(ref _rejectedFrames));
+
     public event Action<RpcDisconnectReason> Disconnected
     {
         add => _disconnectedHandlers += value;
@@ -87,11 +104,18 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
         // Check before the copy, so a rejected send allocates nothing.
         if (_disconnected != 0 || _queuedBytes + frame.Length > _tcpOptions.SendQueueBytes)
         {
+            Interlocked.Increment(ref _rejectedFrames);
             return false;
         }
 
         byte[] copy = frame.ToArray();
-        return Enqueue(copy, copy.Length, pooled: false);
+        if (Enqueue(copy, copy.Length, pooled: false))
+        {
+            return true;
+        }
+
+        Interlocked.Increment(ref _rejectedFrames);
+        return false;
     }
 
     public bool TrySendOwned(byte[] frame, int length)
@@ -101,6 +125,7 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
             return true;
         }
 
+        Interlocked.Increment(ref _rejectedFrames);
         ArrayPool<byte>.Shared.Return(frame, clearArray: true);
         return false;
     }
@@ -123,6 +148,11 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
 
             _sendQueue.Enqueue(new SendBuffer(frame, length, pooled));
             _queuedBytes += length;
+            if (_queuedBytes > _peakQueuedBytes)
+            {
+                _peakQueuedBytes = _queuedBytes;
+            }
+
             closeForBacklog = _backlog.ExceedsWindow(_queuedBytes, _rpcOptions.TimestampNanos());
             if (!closeForBacklog && !_sending)
             {
@@ -215,7 +245,10 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
 
             try
             {
-                await SendAllAsync(buffer, _lifetime.Token).ConfigureAwait(false);
+                int writes = await SendAllAsync(buffer, _lifetime.Token).ConfigureAwait(false);
+                Interlocked.Add(ref _writes, writes);
+                Interlocked.Increment(ref _packetsSent);
+                Interlocked.Add(ref _bytesSent, buffer.Length);
             }
             catch (Exception)
             {
@@ -476,9 +509,10 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
             .ConfigureAwait(false);
     }
 
-    private async Task SendAllAsync(SendBuffer buffer, CancellationToken cancellationToken)
+    private async Task<int> SendAllAsync(SendBuffer buffer, CancellationToken cancellationToken)
     {
         int offset = 0;
+        int writes = 0;
         while (offset < buffer.Length)
         {
             int sent = await _socket.SendAsync(
@@ -490,7 +524,10 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
             }
 
             offset += sent;
+            writes++;
         }
+
+        return writes;
     }
 
     // One queued frame. A pooled frame comes from the shared pool and returns
@@ -574,6 +611,8 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
 
     private void OnFrame(ReadOnlySpan<byte> frame)
     {
+        Interlocked.Increment(ref _packetsReceived);
+        Interlocked.Add(ref _bytesReceived, frame.Length);
         _frameReceivedHandlers?.Invoke(frame);
     }
 

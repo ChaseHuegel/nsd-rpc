@@ -15,7 +15,7 @@ add or work an issue.
 
 - [x] [Reliable send queue with a backlog policy](/docs/issues/0056-send-backlog-policy.md) — never drop an accepted frame, close a peer that cannot drain.
 - [x] [Idle timeout and disconnect reasons](/docs/issues/0057-idle-timeout-and-reasons.md) — detect a half-open peer and report why it closed.
-- [ ] [Connection metrics](/docs/issues/0058-connection-metrics.md) — frames, bytes, queue depth, and rejected sends.
+- [x] [Connection metrics](/docs/issues/0058-connection-metrics.md) — frames, bytes, queue depth, and rejected sends.
 - [ ] [Connect timeout and bind address](/docs/issues/0059-connect-timeout-and-bind-address.md) — bound connect and choose the listen interface.
 - [ ] [Send batching](/docs/issues/0060-send-batching.md) — one write per interval instead of one write per frame.
 - [ ] [Peer endpoint, peer close, and log sink](/docs/issues/0061-peer-endpoint-and-log-sink.md) — a host reads the endpoint, disconnects one peer, and attaches a logger.

@@ -61,6 +61,10 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
 
     internal IRpcConnection Connection => _connection;
 
+    /// <summary>The connection counters, or zeros when the transport has none.</summary>
+    public RpcConnectionStats Stats =>
+        _connection is IRpcConnectionStats stats ? stats.Stats : default;
+
     public PeerSet Peers => new(_selfPeers);
 
     /// <summary>The client id the server assigned, or zero on the client side.</summary>

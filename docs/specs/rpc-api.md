@@ -81,6 +81,27 @@ data.
 | `LocalClose` | The local host called `Close`. |
 | `ProtocolViolation` | The peer broke the framing or protocol rules. |
 
+### Connection stats
+
+`IRpcConnectionStats` is an optional transport capability. `TcpConnection` and
+both TCP connection wrappers implement it. `RpcPeer.Stats` reads it and
+returns zeros when the transport has none.
+
+| Field | Meaning |
+|---|---|
+| `PacketsSent` | The frames sent. |
+| `PacketsReceived` | The frames received. |
+| `BytesSent` | The bytes sent, including the 4-byte length prefix. |
+| `BytesReceived` | The bytes received, including the 4-byte length prefix. |
+| `QueuedBytes` | The current outbound queue size. |
+| `PeakQueuedBytes` | The high-water mark since construction. |
+| `Writes` | The socket writes. One frame may take several writes. |
+| `RejectedFrames` | The refused sends. |
+
+`Packets` counts frames. `Writes` counts socket writes. The counters exclude
+the handshake. A custom transport implements the capability to report its own
+values.
+
 ## RpcOptions
 
 ```csharp

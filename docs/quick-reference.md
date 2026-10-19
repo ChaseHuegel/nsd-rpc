@@ -66,6 +66,7 @@ The engine for one connection. `RpcClient` and `RpcServer` expose it.
 | `HandleFrame(ReadOnlySpan<byte> frame)` | Feeds one frame. |
 | `CheckTimeouts(long timestampNanos)` / `Poll()` | Enforce the deadlines. |
 | `FaultPending(int errorCode, string message)` | Completes every pending call with the given error. |
+| `Stats` | The connection counters, or zeros when the transport has none. |
 
 ### IRpcCaller and IRpcHost
 
@@ -237,6 +238,8 @@ one.
 | `IServerConnection : IRpcConnection` | Adds `ClientId` and `RemoteEndPoint`. |
 | `IRpcServerTransport` | `AcceptAsync()` and `Close()`. |
 | `RpcDisconnectReason` | The reason carried by the `Disconnected` event. See [rpc-api](specs/rpc-api.md). |
+| `IRpcConnectionStats` | Optional capability: `RpcConnectionStats Stats`. |
+| `RpcConnectionStats` | Frames, bytes, queue depth, writes, and refused sends. |
 
 The peer owns the 4-byte length prefix. A custom transport implements its own
 framing. The contract lives in [rpc-api](specs/rpc-api.md).

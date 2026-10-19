@@ -7,7 +7,7 @@ namespace NsdRpc.Tcp;
 /// <summary>
 /// A server TCP connection. The server transport creates it at accept.
 /// </summary>
-public sealed class TcpServerConnection : IServerConnection, IOwnedFrameSink
+public sealed class TcpServerConnection : IServerConnection, IOwnedFrameSink, IRpcConnectionStats
 {
     private readonly TcpConnection _inner;
 
@@ -22,6 +22,8 @@ public sealed class TcpServerConnection : IServerConnection, IOwnedFrameSink
     public ulong ClientId { get; }
 
     public EndPoint? RemoteEndPoint { get; }
+
+    public RpcConnectionStats Stats => _inner.Stats;
 
     public bool IsConnected => _inner.IsConnected;
 
