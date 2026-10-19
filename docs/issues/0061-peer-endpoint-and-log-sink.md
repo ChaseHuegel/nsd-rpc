@@ -1,7 +1,7 @@
 # Improvement: Peer endpoint, peer close, and log sink
 
 - Type: improvement
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem

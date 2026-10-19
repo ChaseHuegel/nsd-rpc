@@ -1,7 +1,7 @@
 # Improvement: Connect timeout and bind address
 
 - Type: improvement
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem

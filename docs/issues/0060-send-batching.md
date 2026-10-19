@@ -1,7 +1,7 @@
 # Improvement: Send batching
 
 - Type: improvement
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
