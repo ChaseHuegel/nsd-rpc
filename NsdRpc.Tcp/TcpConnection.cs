@@ -331,13 +331,14 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink, IRpcConne
             return false;
         }
 
+        // Count the frames before the write. A receiver that reads the bytes
+        // then observes the stats sees the matching frame totals.
+        Interlocked.Add(ref _packetsSent, count);
+        Interlocked.Add(ref _bytesSent, bytes);
         try
         {
-            int writes = await SendAllAsync(
+            await SendAllAsync(
                 new SendBuffer(batch, bytes, pooled: true), _lifetime.Token).ConfigureAwait(false);
-            Interlocked.Add(ref _writes, writes);
-            Interlocked.Add(ref _packetsSent, count);
-            Interlocked.Add(ref _bytesSent, bytes);
         }
         catch (Exception)
         {
@@ -380,12 +381,13 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink, IRpcConne
             return false;
         }
 
+        // Count the frame before the write. A receiver that reads the bytes
+        // then observes the stats sees the matching frame totals.
+        Interlocked.Increment(ref _packetsSent);
+        Interlocked.Add(ref _bytesSent, buffer.Length);
         try
         {
-            int writes = await SendAllAsync(buffer, _lifetime.Token).ConfigureAwait(false);
-            Interlocked.Add(ref _writes, writes);
-            Interlocked.Increment(ref _packetsSent);
-            Interlocked.Add(ref _bytesSent, buffer.Length);
+            await SendAllAsync(buffer, _lifetime.Token).ConfigureAwait(false);
         }
         catch (Exception)
         {
@@ -642,16 +644,30 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink, IRpcConne
 
     private async Task SendAllAsync(byte[] data, CancellationToken cancellationToken)
     {
-        await SendAllAsync(new SendBuffer(data, data.Length, pooled: false), cancellationToken)
-            .ConfigureAwait(false);
+        await SendAllAsync(
+            new SendBuffer(data, data.Length, pooled: false),
+            cancellationToken,
+            countWrites: false).ConfigureAwait(false);
     }
 
-    private async Task<int> SendAllAsync(SendBuffer buffer, CancellationToken cancellationToken)
+    private async Task SendAllAsync(SendBuffer buffer, CancellationToken cancellationToken)
+    {
+        await SendAllAsync(buffer, cancellationToken, countWrites: true).ConfigureAwait(false);
+    }
+
+    // Counts each write before the await. A receiver that reads the bytes then
+    // observes the stats sees the matching write count.
+    private async Task SendAllAsync(
+        SendBuffer buffer, CancellationToken cancellationToken, bool countWrites)
     {
         int offset = 0;
-        int writes = 0;
         while (offset < buffer.Length)
         {
+            if (countWrites)
+            {
+                Interlocked.Increment(ref _writes);
+            }
+
             int sent = await _socket.SendAsync(
                 buffer.Frame.AsMemory(offset, buffer.Length - offset), SocketFlags.None, cancellationToken)
                 .ConfigureAwait(false);
@@ -661,10 +677,7 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink, IRpcConne
             }
 
             offset += sent;
-            writes++;
         }
-
-        return writes;
     }
 
     // One queued frame. A pooled frame comes from the shared pool and returns
