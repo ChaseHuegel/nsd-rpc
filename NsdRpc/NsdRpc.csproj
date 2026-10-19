@@ -15,7 +15,7 @@
 
   <PropertyGroup>
     <PackageId>NsdRpc</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>Chase Huegel</Authors>
     <Description>A zero-dependency nsd based C# RPC framework and library.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
