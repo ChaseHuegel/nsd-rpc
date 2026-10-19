@@ -540,23 +540,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
     internal void StreamAsserting<TChunk>(ulong method, ulong requestId, in TChunk chunk)
         where TChunk : struct
     {
-        InboundStreamState state;
-        lock (_inboundLock)
-        {
-            if (_faulted)
-            {
-                state = InboundStreamState.Faulted;
-            }
-            else if (!_inbound.TryGetValue(requestId, out InboundCall? inbound))
-            {
-                state = InboundStreamState.Absent;
-            }
-            else
-            {
-                state = inbound.Cancelled ? InboundStreamState.Cancelled : InboundStreamState.Open;
-            }
-        }
-
+        InboundStreamState state = CheckStreamState(requestId);
         if (state == InboundStreamState.Faulted)
         {
             RpcLog.Drop("chunk after fault");
@@ -576,6 +560,49 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         }
 
         SendChunkFrame(method, requestId, in chunk);
+    }
+
+    internal bool TryStreamAsserting<TChunk>(ulong method, ulong requestId, in TChunk chunk)
+        where TChunk : struct
+    {
+        InboundStreamState state = CheckStreamState(requestId);
+        if (state == InboundStreamState.Faulted)
+        {
+            RpcLog.Drop("chunk after fault");
+            return false;
+        }
+
+        if (state == InboundStreamState.Absent)
+        {
+            Invariant.Fail("chunk after response for request " + requestId);
+            return false;
+        }
+
+        if (state == InboundStreamState.Cancelled)
+        {
+            RpcLog.Drop("chunk after cancellation");
+            return false;
+        }
+
+        return SendChunkFrame(method, requestId, in chunk);
+    }
+
+    private InboundStreamState CheckStreamState(ulong requestId)
+    {
+        lock (_inboundLock)
+        {
+            if (_faulted)
+            {
+                return InboundStreamState.Faulted;
+            }
+
+            if (!_inbound.TryGetValue(requestId, out InboundCall? inbound))
+            {
+                return InboundStreamState.Absent;
+            }
+
+            return inbound.Cancelled ? InboundStreamState.Cancelled : InboundStreamState.Open;
+        }
     }
 
     internal bool AttachCancellation(ulong requestId, CancellationTokenSource cancelSource)
@@ -850,7 +877,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         }
     }
 
-    private void SendChunkFrame<TChunk>(ulong method, ulong requestId, in TChunk chunk)
+    private bool SendChunkFrame<TChunk>(ulong method, ulong requestId, in TChunk chunk)
         where TChunk : struct
     {
         byte[]? payload = SerializePayload(in chunk, PayloadSerializerCache<TChunk>.Value);
@@ -859,7 +886,10 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         if (!SendEnvelope(in envelope))
         {
             RpcLog.Drop("chunk send rejected");
+            return false;
         }
+
+        return true;
     }
 
     private void SendCancellationFrame(ulong id)

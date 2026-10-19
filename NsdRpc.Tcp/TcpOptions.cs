@@ -28,4 +28,10 @@ public sealed class TcpOptions
 
     /// <summary>The largest queued send bytes per connection. A full queue rejects sends.</summary>
     public int SendQueueBytes { get; set; } = 1048576;
+
+    /// <summary>The queued send bytes that start the backlog window. Zero disables the check.</summary>
+    public int SendBacklogDisconnectBytes { get; set; } = 0;
+
+    /// <summary>The window in milliseconds for the backlog disconnect. Zero disables the check.</summary>
+    public int SendBacklogDisconnectMs { get; set; } = 0;
 }

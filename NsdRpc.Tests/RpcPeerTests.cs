@@ -1159,6 +1159,62 @@ public sealed class RpcPeerTests
     }
 
     [Fact]
+    public async Task TryStreamReturnsFalseWhenTheSendIsRejected()
+    {
+        var connection = new InMemoryConnection();
+        var peer = new RpcPeer(connection);
+        bool streamed = true;
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.DispatchHook = (context, payload) =>
+        {
+            streamed = context.TryStream(new Handshake(2));
+            context.Respond(RpcResult<Handshake>.Success(new Handshake(3)));
+            gate.TrySetResult();
+            return default;
+        };
+        connection.RejectSends = true;
+
+        var request = new Envelope(
+            1, (byte)RpcMessageKind.Request, 1UL, EchoMethod, new Handshake(1).Serialize(), null);
+        RpcTestHelpers.Deliver(peer, in request);
+        await gate.Task;
+
+        Assert.False(streamed);
+        Assert.True(connection.IsConnected);
+    }
+
+    [Fact]
+    public async Task TryStreamSendsAChunkAndReportsSuccess()
+    {
+        var connection = new InMemoryConnection();
+        var peer = new RpcPeer(connection);
+        bool streamed = false;
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        peer.DispatchHook = (context, payload) =>
+        {
+            streamed = context.TryStream(new Handshake(2));
+            context.Respond(RpcResult<Handshake>.Success(new Handshake(3)));
+            gate.TrySetResult();
+            return default;
+        };
+
+        var request = new Envelope(
+            1, (byte)RpcMessageKind.Request, 1UL, EchoMethod, new Handshake(1).Serialize(), null);
+        RpcTestHelpers.Deliver(peer, in request);
+        await gate.Task;
+
+        Assert.True(streamed);
+        List<Envelope> frames = DecodeFrames(connection.SentFrames);
+        Assert.Equal(2, frames.Count);
+        Assert.Equal((byte)RpcMessageKind.Notification, frames[0].Kind);
+        Assert.Equal(1UL, frames[0].Id);
+        Assert.Equal(EchoMethod, frames[0].Method);
+        Assert.Equal(
+            2,
+            Handshake.Deserialize((ReadOnlySpan<byte>)frames[0].Payload!).ProtocolVersion);
+    }
+
+    [Fact]
     public async Task NotificationDispatchesToHook()
     {
         var connection = new InMemoryConnection();

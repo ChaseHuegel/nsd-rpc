@@ -42,6 +42,16 @@ public readonly struct RpcContext
         _peer.StreamAsserting(Method, RequestId, in chunk);
     }
 
+    /// <summary>
+    /// Sends one chunk before the response. Returns false when the send is
+    /// rejected. Misuse still asserts.
+    /// </summary>
+    public bool TryStream<TChunk>(in TChunk chunk)
+        where TChunk : struct
+    {
+        return _peer.TryStreamAsserting(Method, RequestId, in chunk);
+    }
+
     public void Respond<TResponse>(in RpcResult<TResponse> result)
         where TResponse : struct
     {

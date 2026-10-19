@@ -25,6 +25,7 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
     private readonly long _idleShrinkAfterNanos;
     private readonly TimeSpan _idleShrinkDelay;
     private readonly long _idleTimeoutNanos;
+    private readonly SendBacklogTracker _backlog;
     private Action<RpcDisconnectReason>? _disconnectedHandlers;
     private RpcFrameHandler? _frameReceivedHandlers;
     private int _queuedBytes;
@@ -45,6 +46,7 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
     internal TcpConnection(
         Socket socket, RpcOptions rpcOptions, TcpOptions tcpOptions, ArrayPool<byte> receiveBufferPool)
     {
+        TcpOptionValidation.Validate(tcpOptions);
         _socket = socket;
         _rpcOptions = rpcOptions;
         _tcpOptions = tcpOptions;
@@ -54,6 +56,8 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
         _idleShrinkAfterNanos = DurationNanos(tcpOptions.DecoderIdleShrinkAfter);
         _idleShrinkDelay = ClampDelay(tcpOptions.DecoderIdleShrinkAfter);
         _idleTimeoutNanos = DurationNanos(tcpOptions.IdleTimeout);
+        _backlog = new SendBacklogTracker(
+            tcpOptions.SendBacklogDisconnectBytes, tcpOptions.SendBacklogDisconnectMs);
         // One delegate for the connection. The receive loop must not allocate.
         _onFrame = OnFrame;
     }
@@ -62,6 +66,9 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
 
     // The decoder buffer bytes. Tests read it to pin the idle shrink.
     internal int DecoderBufferBytes => _decoder.BufferBytes;
+
+    // The queued send bytes. Tests read it to pin the backlog policy.
+    internal int QueuedBytes => Volatile.Read(ref _queuedBytes);
 
     public event Action<RpcDisconnectReason> Disconnected
     {
@@ -100,6 +107,8 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
 
     private bool Enqueue(byte[] frame, int length, bool pooled)
     {
+        bool closeForBacklog = false;
+        bool drain = false;
         lock (_sendLock)
         {
             if (_disconnected != 0)
@@ -114,15 +123,26 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
 
             _sendQueue.Enqueue(new SendBuffer(frame, length, pooled));
             _queuedBytes += length;
-            if (_sending)
+            closeForBacklog = _backlog.ExceedsWindow(_queuedBytes, _rpcOptions.TimestampNanos());
+            if (!closeForBacklog && !_sending)
             {
-                return true;
+                _sending = true;
+                drain = true;
             }
-
-            _sending = true;
         }
 
-        _ = DrainSendQueueAsync();
+        if (closeForBacklog)
+        {
+            ReturnQueuedBuffers();
+            FireDisconnected(RpcDisconnectReason.BacklogLimit);
+            return true;
+        }
+
+        if (drain)
+        {
+            _ = DrainSendQueueAsync();
+        }
+
         return true;
     }
 
@@ -170,6 +190,7 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
         while (true)
         {
             SendBuffer buffer;
+            bool closeForBacklog;
             lock (_sendLock)
             {
                 if (_sendQueue.Count == 0)
@@ -180,6 +201,16 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
 
                 buffer = _sendQueue.Dequeue();
                 _queuedBytes -= buffer.Length;
+                closeForBacklog = _backlog.ExceedsWindow(
+                    _queuedBytes, _rpcOptions.TimestampNanos());
+            }
+
+            if (closeForBacklog)
+            {
+                ReturnBuffer(buffer);
+                ReturnQueuedBuffers();
+                FireDisconnected(RpcDisconnectReason.BacklogLimit);
+                return;
             }
 
             try

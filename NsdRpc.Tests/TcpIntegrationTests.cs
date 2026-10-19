@@ -811,6 +811,88 @@ public sealed class TcpIntegrationTests
     }
 
     [Fact]
+    public async Task SustainedBacklogClosesWithBacklogLimit()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            Task<Socket> accept = listener.AcceptSocketAsync();
+            using var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            client.SendBufferSize = 1024;
+            await client.ConnectAsync(IPAddress.Loopback, port);
+            using Socket server = await accept;
+
+            var clock = new FakeClock();
+            var options = new RpcOptions { TimestampNanos = clock.Now };
+            var tcpOptions = new TcpOptions
+            {
+                SendQueueBytes = 8 << 20,
+                SendBacklogDisconnectBytes = 128 * 1024,
+                SendBacklogDisconnectMs = 1000,
+            };
+            var connection = new TcpConnection(client, options, tcpOptions);
+            var disconnected = new TaskCompletionSource<RpcDisconnectReason>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            connection.Disconnected += reason => disconnected.TrySetResult(reason);
+
+            // The large frame blocks the drain while the peer does not read.
+            // The small frames stay queued and hold the backlog above threshold.
+            Assert.True(connection.TrySend(new byte[4 << 20]));
+            byte[] frame = new byte[4096];
+            int threshold = tcpOptions.SendBacklogDisconnectBytes;
+            for (int index = 0; index < 64 && connection.QueuedBytes < threshold; index++)
+            {
+                clock.Advance(TimeSpan.FromMilliseconds(10));
+                Assert.True(connection.TrySend(frame));
+            }
+
+            clock.Advance(TimeSpan.FromMilliseconds(1000));
+            Assert.True(connection.TrySend(frame));
+
+            RpcDisconnectReason reason = await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.Equal(RpcDisconnectReason.BacklogLimit, reason);
+            Assert.False(connection.IsConnected);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task AcceptedFramesArriveInOrderUnderTheBacklogPolicy()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var tcpOptions = new TcpOptions
+            {
+                SendQueueBytes = 1 << 20,
+                SendBacklogDisconnectBytes = 256,
+                SendBacklogDisconnectMs = 60000,
+            };
+            var connection = new TcpConnection(client, new RpcOptions(), tcpOptions);
+
+            for (int index = 0; index < 64; index++)
+            {
+                Assert.True(connection.TrySend(Frame(BitConverter.GetBytes(index))));
+            }
+
+            for (int index = 0; index < 64; index++)
+            {
+                byte[] payload = await ReadFrameAsync(server).WaitAsync(TimeSpan.FromSeconds(10));
+                Assert.Equal(index, BinaryPrimitives.ReadInt32LittleEndian(payload));
+            }
+
+            connection.Close();
+        }
+    }
+
+    [Fact]
     public async Task ReceiveOnceRentsAndReturnsTheBufferOnANormalRead()
     {
         (Socket client, Socket server) = await ConnectPairAsync();

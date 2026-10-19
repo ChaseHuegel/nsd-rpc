@@ -13,7 +13,7 @@ add or work an issue.
 
 ### Improvement
 
-- [ ] [Reliable send queue with a backlog policy](/docs/issues/0056-send-backlog-policy.md) — never drop an accepted frame, close a peer that cannot drain.
+- [x] [Reliable send queue with a backlog policy](/docs/issues/0056-send-backlog-policy.md) — never drop an accepted frame, close a peer that cannot drain.
 - [x] [Idle timeout and disconnect reasons](/docs/issues/0057-idle-timeout-and-reasons.md) — detect a half-open peer and report why it closed.
 - [ ] [Connection metrics](/docs/issues/0058-connection-metrics.md) — frames, bytes, queue depth, and rejected sends.
 - [ ] [Connect timeout and bind address](/docs/issues/0059-connect-timeout-and-bind-address.md) — bound connect and choose the listen interface.

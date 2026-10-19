@@ -19,6 +19,7 @@ public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink
     {
         _rpcOptions = rpcOptions ?? throw new ArgumentNullException(nameof(rpcOptions));
         _tcpOptions = tcpOptions ?? throw new ArgumentNullException(nameof(tcpOptions));
+        TcpOptionValidation.Validate(_tcpOptions);
     }
 
     public bool IsConnected => _connection?.IsConnected ?? false;

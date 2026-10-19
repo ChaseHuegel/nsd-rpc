@@ -29,6 +29,7 @@ public sealed class TcpServerTransport : IRpcServerTransport
     {
         _rpcOptions = rpcOptions ?? throw new ArgumentNullException(nameof(rpcOptions));
         _tcpOptions = tcpOptions ?? throw new ArgumentNullException(nameof(tcpOptions));
+        TcpOptionValidation.Validate(_tcpOptions);
     }
 
     /// <summary>The bound port. Useful when TcpOptions.Port is zero.</summary>

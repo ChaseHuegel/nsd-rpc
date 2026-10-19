@@ -21,6 +21,8 @@ internal sealed class InMemoryConnection : IRpcConnection
 
     public bool IsConnectedValue { get; set; } = true;
 
+    public bool RejectSends { get; set; }
+
     public bool IsConnected => IsConnectedValue;
 
     public void Close(RpcDisconnectReason reason = RpcDisconnectReason.LocalClose)
@@ -42,7 +44,7 @@ internal sealed class InMemoryConnection : IRpcConnection
 
     public bool TrySend(ReadOnlySpan<byte> frame)
     {
-        if (!IsConnectedValue)
+        if (!IsConnectedValue || RejectSends)
         {
             return false;
         }

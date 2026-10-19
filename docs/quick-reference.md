@@ -101,6 +101,7 @@ The handle for one inbound message. A deferred handler keeps it.
 | `RequestId` | The request id. Zero for a notification. |
 | `IsServer` | True when the handler runs on the server side. |
 | `Stream<TChunk>(in TChunk chunk)` | Sends one chunk before the response. |
+| `TryStream<TChunk>(in TChunk chunk)` | Sends one chunk. Returns false when the send is rejected. |
 | `Respond<TResponse>(in RpcResult<TResponse> result)` | Sends the response. |
 | `Fail(RpcErrorCode code, string message)` | Sends a failure response. |
 
@@ -214,6 +215,8 @@ Read at transport construction.
 | `ReceiveBufferBytes` | 65536 | The receive buffer size per read. |
 | `DecoderIdleShrinkAfter` | 30 seconds | The decoder shrinks after this idle period. Zero or negative disables it. |
 | `SendQueueBytes` | 1048576 | The largest queued send bytes per connection. A full queue rejects sends. |
+| `SendBacklogDisconnectBytes` | `0` (disabled) | The queued send bytes that start the backlog window. Must not exceed `SendQueueBytes`. |
+| `SendBacklogDisconnectMs` | `0` (disabled) | The window for the backlog disconnect. The two backlog keys must both be zero or both be positive. |
 
 ## TCP transport
 

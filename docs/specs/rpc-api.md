@@ -115,6 +115,13 @@ The TCP transport options live in
 | `ReceiveBufferBytes` | 65,536 | The receive buffer size per read. The receive loop rents it per read. |
 | `DecoderIdleShrinkAfter` | 30 seconds | The decoder shrinks to its start size after this idle period. Zero or negative disables it. |
 | `SendQueueBytes` | 1,048,576 | The largest queued send bytes for one connection. A full queue rejects the send. |
+| `SendBacklogDisconnectBytes` | `0` (disabled) | The queued send bytes that start the backlog window. Must not exceed `SendQueueBytes`. |
+| `SendBacklogDisconnectMs` | `0` (disabled) | The window for the backlog disconnect. The two backlog keys must both be zero or both be positive. |
+
+The send backlog disconnect is opt-in. When the queued send bytes stay at or
+above `SendBacklogDisconnectBytes` for `SendBacklogDisconnectMs`, the
+connection closes with `BacklogLimit`. The check runs on enqueue and on
+drain. It uses the monotonic timestamp source and no timer.
 
 The server transport completes each handshake in the background. A silent
 client does not stall the other clients. A handshake that passes its
@@ -263,6 +270,7 @@ public readonly struct RpcContext
     public bool IsServer { get; }
 
     public void Stream<TChunk>(in TChunk chunk);
+    public bool TryStream<TChunk>(in TChunk chunk);
     public void Respond<TResponse>(in RpcResult<TResponse> result);
     public void Fail(RpcErrorCode code, string message);
 }
@@ -272,6 +280,9 @@ public readonly struct RpcContext
 - `Respond` and `Stream` are safe from any thread. Sends are queue-based.
 - `Stream` sends chunks before the response. The peer drops them after a
   cancellation or a response.
+- `TryStream` sends one chunk and returns false when the send is rejected.
+  `Stream` keeps the assert behavior and drops a rejected chunk with a log.
+  A producer that paces a large stream uses `TryStream`.
 - `ClientId` is 0 on the client side. `IsServer` tells the handler which side
   it runs on.
 - `Host` is the endpoint that received the message. A handler fans out

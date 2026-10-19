@@ -1,7 +1,7 @@
 # Improvement: Reliable send queue with a backlog policy
 
 - Type: improvement
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
