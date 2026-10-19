@@ -12,7 +12,7 @@ public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink
     private readonly RpcOptions _rpcOptions;
     private readonly TcpOptions _tcpOptions;
     private TcpConnection? _connection;
-    private Action? _disconnectedHandlers;
+    private Action<RpcDisconnectReason>? _disconnectedHandlers;
     private RpcFrameHandler? _frameReceivedHandlers;
 
     public TcpClientConnection(RpcOptions rpcOptions, TcpOptions tcpOptions)
@@ -23,9 +23,9 @@ public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink
 
     public bool IsConnected => _connection?.IsConnected ?? false;
 
-    public void Close()
+    public void Close(RpcDisconnectReason reason = RpcDisconnectReason.LocalClose)
     {
-        _connection?.Close();
+        _connection?.Close(reason);
     }
 
     bool IOwnedFrameSink.TrySendOwned(byte[] frame, int length)
@@ -39,7 +39,7 @@ public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink
         return _connection.TrySendOwned(frame, length);
     }
 
-    public event Action Disconnected
+    public event Action<RpcDisconnectReason> Disconnected
     {
         add => _disconnectedHandlers += value;
         remove => _disconnectedHandlers -= value;
@@ -76,7 +76,7 @@ public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink
         }
         catch (Exception)
         {
-            connection.Close();
+            connection.Close(RpcDisconnectReason.HandshakeFailed);
             throw;
         }
 
@@ -84,9 +84,9 @@ public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink
         connection.StartReceiving();
     }
 
-    private void ForwardDisconnected()
+    private void ForwardDisconnected(RpcDisconnectReason reason)
     {
-        _disconnectedHandlers?.Invoke();
+        _disconnectedHandlers?.Invoke(reason);
     }
 
     private void ForwardFrame(ReadOnlySpan<byte> frame)

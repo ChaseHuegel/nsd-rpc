@@ -24,7 +24,8 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
     private readonly CancellationTokenSource _lifetime = new();
     private readonly long _idleShrinkAfterNanos;
     private readonly TimeSpan _idleShrinkDelay;
-    private Action? _disconnectedHandlers;
+    private readonly long _idleTimeoutNanos;
+    private Action<RpcDisconnectReason>? _disconnectedHandlers;
     private RpcFrameHandler? _frameReceivedHandlers;
     private int _queuedBytes;
     private bool _sending;
@@ -32,6 +33,7 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
     private int _disconnected;
     private int _idleSweepRunning;
     private long _lastReadNanos;
+    private RpcDisconnectReason _receiveDisconnectReason = RpcDisconnectReason.ReadError;
 
     public TcpConnection(Socket socket, RpcOptions rpcOptions, TcpOptions tcpOptions)
         : this(socket, rpcOptions, tcpOptions, ArrayPool<byte>.Shared)
@@ -49,8 +51,9 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
         _receiveBufferPool = receiveBufferPool;
         _decoder = new TcpFrameDecoder(rpcOptions.MaxFrameBytes);
         _lastReadNanos = rpcOptions.TimestampNanos();
-        _idleShrinkAfterNanos = IdleShrinkNanos(tcpOptions.DecoderIdleShrinkAfter);
-        _idleShrinkDelay = IdleShrinkDelay(tcpOptions.DecoderIdleShrinkAfter);
+        _idleShrinkAfterNanos = DurationNanos(tcpOptions.DecoderIdleShrinkAfter);
+        _idleShrinkDelay = ClampDelay(tcpOptions.DecoderIdleShrinkAfter);
+        _idleTimeoutNanos = DurationNanos(tcpOptions.IdleTimeout);
         // One delegate for the connection. The receive loop must not allocate.
         _onFrame = OnFrame;
     }
@@ -60,7 +63,7 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
     // The decoder buffer bytes. Tests read it to pin the idle shrink.
     internal int DecoderBufferBytes => _decoder.BufferBytes;
 
-    public event Action Disconnected
+    public event Action<RpcDisconnectReason> Disconnected
     {
         add => _disconnectedHandlers += value;
         remove => _disconnectedHandlers -= value;
@@ -157,9 +160,9 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
         }
     }
 
-    public void Close()
+    public void Close(RpcDisconnectReason reason = RpcDisconnectReason.LocalClose)
     {
-        FireDisconnected();
+        FireDisconnected(reason);
     }
 
     private async Task DrainSendQueueAsync()
@@ -187,7 +190,7 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
             {
                 ReturnBuffer(buffer);
                 ReturnQueuedBuffers();
-                FireDisconnected();
+                FireDisconnected(RpcDisconnectReason.WriteError);
                 return;
             }
 
@@ -244,31 +247,84 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
         }
         finally
         {
-            FireDisconnected();
+            FireDisconnected(_receiveDisconnectReason);
         }
+    }
+
+    // A test seam. It reads the same deadline as the receive wait.
+    internal bool IsIdleExpired()
+    {
+        if (_idleTimeoutNanos <= 0L)
+        {
+            return false;
+        }
+
+        return !TryGetIdleRemaining(out _);
     }
 
     // Waits until the socket has data. The wait holds no receive buffer, so an
     // idle connection holds none. A zero-length receive returns when the socket
     // is readable and does not consume the data. Returns false on a socket
-    // failure or a close.
+    // failure, an idle timeout, or a close.
     [SuppressMessage(
         "Design",
         "CA1031",
         Justification = "The receive loop treats every socket failure as a disconnect. It is a transport boundary.")]
     private async Task<bool> WaitForDataAsync()
     {
+        CancellationTokenSource? idle = null;
+        if (_idleTimeoutNanos > 0L)
+        {
+            if (!TryGetIdleRemaining(out TimeSpan remaining))
+            {
+                _receiveDisconnectReason = RpcDisconnectReason.IdleTimeout;
+                return false;
+            }
+
+            idle = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+            idle.CancelAfter(remaining);
+        }
+
+        CancellationToken token = idle?.Token ?? _lifetime.Token;
         try
         {
             await _socket
-                .ReceiveAsync(Memory<byte>.Empty, SocketFlags.None, _lifetime.Token)
+                .ReceiveAsync(Memory<byte>.Empty, SocketFlags.None, token)
                 .ConfigureAwait(false);
             return true;
         }
         catch (Exception)
         {
+            if (idle != null && !_lifetime.IsCancellationRequested && idle.IsCancellationRequested)
+            {
+                _receiveDisconnectReason = RpcDisconnectReason.IdleTimeout;
+            }
+            else
+            {
+                _receiveDisconnectReason = RpcDisconnectReason.ReadError;
+            }
+
             return false;
         }
+        finally
+        {
+            idle?.Dispose();
+        }
+    }
+
+    // Returns false when the idle deadline has already passed.
+    private bool TryGetIdleRemaining(out TimeSpan remaining)
+    {
+        long idleNanos = _rpcOptions.TimestampNanos() - Volatile.Read(ref _lastReadNanos);
+        long remainingNanos = _idleTimeoutNanos - idleNanos;
+        if (remainingNanos <= 0L)
+        {
+            remaining = TimeSpan.Zero;
+            return false;
+        }
+
+        remaining = ClampDelay(TimeSpan.FromTicks(remainingNanos / 100L));
+        return true;
     }
 
     // Rents one receive buffer, reads once, and pushes the bytes. The buffer
@@ -294,17 +350,20 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
             }
             catch (Exception)
             {
+                _receiveDisconnectReason = RpcDisconnectReason.ReadError;
                 return false;
             }
 
             if (read == 0)
             {
+                _receiveDisconnectReason = RpcDisconnectReason.PeerClosed;
                 return false;
             }
 
             Volatile.Write(ref _lastReadNanos, _rpcOptions.TimestampNanos());
             if (!_decoder.TryPush(buffer.AsSpan(0, read), _onFrame))
             {
+                _receiveDisconnectReason = RpcDisconnectReason.ProtocolViolation;
                 return false;
             }
 
@@ -453,7 +512,7 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
         }
     }
 
-    private static long IdleShrinkNanos(TimeSpan value)
+    private static long DurationNanos(TimeSpan value)
     {
         if (value <= TimeSpan.Zero)
         {
@@ -471,7 +530,7 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
     }
 
     // Task.Delay rejects a delay above Int32.MaxValue milliseconds.
-    private static TimeSpan IdleShrinkDelay(TimeSpan value)
+    private static TimeSpan ClampDelay(TimeSpan value)
     {
         if (value <= TimeSpan.Zero)
         {
@@ -487,7 +546,7 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
         _frameReceivedHandlers?.Invoke(frame);
     }
 
-    private void FireDisconnected()
+    private void FireDisconnected(RpcDisconnectReason reason)
     {
         if (Interlocked.Exchange(ref _disconnected, 1) != 0)
         {
@@ -504,7 +563,8 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink
             // The socket may already be gone. Closing is best-effort.
         }
 
-        _disconnectedHandlers?.Invoke();
+        Action<RpcDisconnectReason>? handlers = _disconnectedHandlers;
         _disconnectedHandlers = null;
+        handlers?.Invoke(reason);
     }
 }

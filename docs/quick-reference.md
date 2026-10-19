@@ -210,6 +210,7 @@ Read at transport construction.
 | `Port` | 0 | The port. Zero binds an ephemeral port on the server. |
 | `NoDelay` | `true` | Disables Nagle's algorithm. |
 | `HandshakeTimeout` | 10 seconds | The deadline for one handshake. Zero or negative disables it. |
+| `IdleTimeout` | `0` (disabled) | Closes the connection when no bytes arrive for this period. Zero or negative disables it. |
 | `ReceiveBufferBytes` | 65536 | The receive buffer size per read. |
 | `DecoderIdleShrinkAfter` | 30 seconds | The decoder shrinks after this idle period. Zero or negative disables it. |
 | `SendQueueBytes` | 1048576 | The largest queued send bytes per connection. A full queue rejects sends. |
@@ -228,10 +229,11 @@ one.
 
 | Type | Purpose |
 |---|---|
-| `IRpcConnection` | `IsConnected`, `Close()`, `TrySend(ReadOnlySpan<byte>)`, `Disconnected`, `FrameReceived`. |
+| `IRpcConnection` | `IsConnected`, `Close(reason)`, `TrySend(ReadOnlySpan<byte>)`, `Disconnected`, `FrameReceived`. |
 | `IClientConnection : IRpcConnection` | Adds `ConnectAsync()`. |
 | `IServerConnection : IRpcConnection` | Adds `ClientId` and `RemoteEndPoint`. |
 | `IRpcServerTransport` | `AcceptAsync()` and `Close()`. |
+| `RpcDisconnectReason` | The reason carried by the `Disconnected` event. See [rpc-api](specs/rpc-api.md). |
 
 The peer owns the 4-byte length prefix. A custom transport implements its own
 framing. The contract lives in [rpc-api](specs/rpc-api.md).

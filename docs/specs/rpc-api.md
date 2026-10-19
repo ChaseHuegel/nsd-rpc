@@ -24,9 +24,9 @@ in [NsdRpc/RpcOptions.cs](../../NsdRpc/RpcOptions.cs).
 public interface IRpcConnection
 {
     bool IsConnected { get; }
-    void Close();
+    void Close(RpcDisconnectReason reason = RpcDisconnectReason.LocalClose);
     bool TrySend(ReadOnlySpan<byte> frame);
-    event Action Disconnected;
+    event Action<RpcDisconnectReason> Disconnected;
     event RpcFrameHandler FrameReceived;
 }
 
@@ -50,8 +50,9 @@ public interface IRpcServerTransport
 
 Rules:
 
-- `Close` ends the connection and fires `Disconnected` once. The peer closes
-  the connection when a frame carries another protocol version.
+- `Close` ends the connection and fires `Disconnected` once with the reason.
+  The reason defaults to `LocalClose`. The peer passes `ProtocolViolation`
+  when a frame carries another protocol version.
 - `TrySend` copies the frame before it returns. It returns false when the
   frame was rejected: a closed connection or a full queue.
 - `FrameReceived` fires for each complete frame from the transport's receive
@@ -63,6 +64,22 @@ Rules:
   transports implement their own framing.
 - `ClientId` comes from the server transport at accept. It is never 0. It is
   0 on the client side.
+
+### Disconnect reasons
+
+`RpcDisconnectReason` travels on the `Disconnected` event. It is not wire
+data.
+
+| Value | Meaning |
+|---|---|
+| `PeerClosed` | The peer closed its send side. The read returned zero bytes. |
+| `ReadError` | A socket read failed. |
+| `WriteError` | A socket write failed. |
+| `IdleTimeout` | No bytes arrived within `TcpOptions.IdleTimeout`. |
+| `HandshakeFailed` | The handshake failed or passed its deadline. |
+| `BacklogLimit` | The outbound backlog stayed above its threshold for too long. |
+| `LocalClose` | The local host called `Close`. |
+| `ProtocolViolation` | The peer broke the framing or protocol rules. |
 
 ## RpcOptions
 
@@ -94,6 +111,7 @@ The TCP transport options live in
 | `Port` | `0` | The port. Zero binds an ephemeral port on the server. |
 | `NoDelay` | `true` | Disables Nagle's algorithm. |
 | `HandshakeTimeout` | 10 seconds | The deadline for one handshake. Zero or negative disables it. |
+| `IdleTimeout` | `0` (disabled) | Closes the connection when no bytes arrive for this period. Zero or negative disables it. |
 | `ReceiveBufferBytes` | 65,536 | The receive buffer size per read. The receive loop rents it per read. |
 | `DecoderIdleShrinkAfter` | 30 seconds | The decoder shrinks to its start size after this idle period. Zero or negative disables it. |
 | `SendQueueBytes` | 1,048,576 | The largest queued send bytes for one connection. A full queue rejects the send. |
@@ -101,6 +119,10 @@ The TCP transport options live in
 The server transport completes each handshake in the background. A silent
 client does not stall the other clients. A handshake that passes its
 deadline closes the connection.
+
+The idle timeout measures received bytes, not sent bytes. A send-only
+consumer must send keepalives or disable the key. A silent peer closes with
+`IdleTimeout`.
 
 ## RpcPeer
 

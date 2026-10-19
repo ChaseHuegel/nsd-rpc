@@ -6,11 +6,11 @@ internal sealed class SinkConnection : IRpcConnection
 {
     public bool IsConnected => true;
 
-    public void Close()
+    public void Close(RpcDisconnectReason reason = RpcDisconnectReason.LocalClose)
     {
     }
 
-    public event Action Disconnected
+    public event Action<RpcDisconnectReason> Disconnected
     {
         add { }
         remove { }

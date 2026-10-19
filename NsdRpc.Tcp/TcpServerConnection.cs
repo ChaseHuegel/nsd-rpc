@@ -25,7 +25,7 @@ public sealed class TcpServerConnection : IServerConnection, IOwnedFrameSink
 
     public bool IsConnected => _inner.IsConnected;
 
-    public event Action Disconnected
+    public event Action<RpcDisconnectReason> Disconnected
     {
         add => _inner.Disconnected += value;
         remove => _inner.Disconnected -= value;
@@ -52,9 +52,9 @@ public sealed class TcpServerConnection : IServerConnection, IOwnedFrameSink
         _inner.StartReceiving();
     }
 
-    public void Close()
+    public void Close(RpcDisconnectReason reason = RpcDisconnectReason.LocalClose)
     {
-        _inner.Close();
+        _inner.Close(reason);
     }
 
     bool IOwnedFrameSink.TrySendOwned(byte[] frame, int length)

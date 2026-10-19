@@ -145,7 +145,7 @@ public sealed class RpcServer : IRpcHost
                 _snapshot = BuildSnapshot();
             }
 
-            connection.Disconnected += () => RemovePeer(clientId);
+            connection.Disconnected += _ => RemovePeer(clientId);
             ClientConnected?.Invoke(peer);
         }
     }

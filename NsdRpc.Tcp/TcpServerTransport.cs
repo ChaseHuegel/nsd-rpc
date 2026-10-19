@@ -138,7 +138,7 @@ public sealed class TcpServerTransport : IRpcServerTransport
                 socket, _rpcOptions, _tcpOptions, clientId, socket.RemoteEndPoint);
             // A disconnect removes the connection from the list. The list stays
             // bounded by the live connection count.
-            connection.Disconnected += () => RemoveAccepted(connection);
+            connection.Disconnected += _ => RemoveAccepted(connection);
             lock (_acceptedLock)
             {
                 _accepted.Add(connection);
@@ -164,7 +164,7 @@ public sealed class TcpServerTransport : IRpcServerTransport
         catch (Exception)
         {
             // Close fires Disconnected, and the handler removes the entry.
-            connection.Close();
+            connection.Close(RpcDisconnectReason.HandshakeFailed);
             return;
         }
 

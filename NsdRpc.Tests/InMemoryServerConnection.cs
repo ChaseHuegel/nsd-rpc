@@ -21,12 +21,12 @@ internal sealed class InMemoryServerConnection : IServerConnection
 
     public bool IsConnected => _inner.IsConnected;
 
-    public void Close()
+    public void Close(RpcDisconnectReason reason = RpcDisconnectReason.LocalClose)
     {
-        _inner.Close();
+        _inner.Close(reason);
     }
 
-    public event Action Disconnected
+    public event Action<RpcDisconnectReason> Disconnected
     {
         add => _inner.Disconnected += value;
         remove => _inner.Disconnected -= value;

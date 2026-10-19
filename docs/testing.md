@@ -87,9 +87,10 @@ The transport tests pin the TCP layer:
   the framing contract, buffer growth, the cap, the idle shrink, and fuzzing.
 - [TcpIntegrationTests.cs](../NsdRpc.Tests/TcpIntegrationTests.cs:10) pins
   the handshake and round trips over loopback sockets, the bad-handshake skip, the
-  handshake framing errors, the send-queue bound, the disconnect paths, the
-  per-read receive buffer rent and return, the idle connection holding no
-  receive buffer, and the decoder idle shrink gate and no-thrash rule.
+  handshake framing errors, the send-queue bound, the disconnect paths and
+  their reasons, the idle timeout and its reset on a read, the per-read
+  receive buffer rent and return, the idle connection holding no receive
+  buffer, and the decoder idle shrink gate and no-thrash rule.
 
 ## Allocation coverage
 

@@ -320,14 +320,16 @@ public sealed class TcpIntegrationTests
         Task<IServerConnection?> accept = transport.AcceptAsync();
         var client = new TcpClientConnection(
             new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
-        var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        client.Disconnected += () => disconnected.TrySetResult();
+        var disconnected = new TaskCompletionSource<RpcDisconnectReason>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        client.Disconnected += reason => disconnected.TrySetResult(reason);
         await client.ConnectAsync();
         await accept;
 
         transport.Close();
-        await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        RpcDisconnectReason reason = await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
+        Assert.Equal(RpcDisconnectReason.PeerClosed, reason);
         Assert.False(client.IsConnected);
         Assert.False(client.TrySend(new byte[4]));
     }
@@ -481,7 +483,7 @@ public sealed class TcpIntegrationTests
         Assert.Equal(1, transport.AcceptedConnectionCount);
 
         var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        serverSide.Disconnected += () => removed.TrySetResult();
+        serverSide.Disconnected += _ => removed.TrySetResult();
         socket.Dispose();
 
         await removed.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -499,7 +501,7 @@ public sealed class TcpIntegrationTests
             using Socket socket = await ConnectRawAsync(transport);
             IServerConnection serverSide = (await accept)!;
             var removed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            serverSide.Disconnected += () => removed.TrySetResult();
+            serverSide.Disconnected += _ => removed.TrySetResult();
             socket.Dispose();
             await removed.Task.WaitAsync(TimeSpan.FromSeconds(10));
         }
@@ -622,11 +624,185 @@ public sealed class TcpIntegrationTests
 
             var connection = new TcpConnection(
                 client, new RpcOptions(), new TcpOptions { SendQueueBytes = 1 << 20 });
-            var disconnected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            connection.Disconnected += () => disconnected.TrySetResult();
+            var disconnected = new TaskCompletionSource<RpcDisconnectReason>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            connection.Disconnected += reason => disconnected.TrySetResult(reason);
             Assert.True(connection.TrySend(new byte[256 * 1024]));
 
-            await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            RpcDisconnectReason actual = await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal(RpcDisconnectReason.WriteError, actual);
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task SilentPeerClosesWithIdleTimeout()
+    {
+        var transport = new TcpServerTransport(
+            new RpcOptions(), new TcpOptions { IdleTimeout = TimeSpan.FromMilliseconds(250) });
+        Task<IServerConnection?> accept = transport.AcceptAsync();
+        using Socket socket = await ConnectRawAsync(transport);
+        IServerConnection serverSide = (await accept)!;
+        var disconnected = new TaskCompletionSource<RpcDisconnectReason>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        serverSide.Disconnected += reason => disconnected.TrySetResult(reason);
+
+        RpcDisconnectReason actual = await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(RpcDisconnectReason.IdleTimeout, actual);
+        Assert.False(serverSide.IsConnected);
+        transport.Close();
+    }
+
+    [Fact]
+    public async Task IdleDeadlineResetsOnARead()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var clock = new FakeClock();
+            var options = new RpcOptions { TimestampNanos = clock.Now };
+            var tcpOptions = new TcpOptions { IdleTimeout = TimeSpan.FromSeconds(30) };
+            var connection = new TcpConnection(client, options, tcpOptions);
+
+            await server.SendAsync(Frame([1, 2, 3]), SocketFlags.None);
+            Assert.True(await connection.ReceiveOnceAsync().WaitAsync(TimeSpan.FromSeconds(10)));
+
+            // The read landed at clock zero, so the deadline is 30 seconds out.
+            clock.Advance(TimeSpan.FromSeconds(29));
+            Assert.False(connection.IsIdleExpired());
+
+            clock.Advance(TimeSpan.FromSeconds(2));
+            Assert.True(connection.IsIdleExpired());
+            connection.Close();
+        }
+    }
+
+    [Fact]
+    public async Task LocalCloseReportsLocalClose()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var connection = new TcpConnection(client, new RpcOptions(), new TcpOptions());
+            var disconnected = new TaskCompletionSource<RpcDisconnectReason>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            connection.Disconnected += reason => disconnected.TrySetResult(reason);
+
+            connection.Close();
+
+            Assert.Equal(
+                RpcDisconnectReason.LocalClose,
+                await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+        }
+    }
+
+    [Fact]
+    public async Task PeerEofReportsPeerClosed()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var connection = new TcpConnection(client, new RpcOptions(), new TcpOptions());
+            var disconnected = new TaskCompletionSource<RpcDisconnectReason>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            connection.Disconnected += reason => disconnected.TrySetResult(reason);
+            connection.StartReceiving();
+
+            server.Dispose();
+
+            Assert.Equal(
+                RpcDisconnectReason.PeerClosed,
+                await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+        }
+    }
+
+    [Fact]
+    public async Task ProtocolViolationReportsProtocolViolation()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var connection = new TcpConnection(client, new RpcOptions(), new TcpOptions());
+            var disconnected = new TaskCompletionSource<RpcDisconnectReason>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            connection.Disconnected += reason => disconnected.TrySetResult(reason);
+            connection.StartReceiving();
+
+            // A negative length prefix fails the decoder.
+            await server.SendAsync(new byte[] { 0xFF, 0xFF, 0xFF, 0xFF }, SocketFlags.None);
+
+            Assert.Equal(
+                RpcDisconnectReason.ProtocolViolation,
+                await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+        }
+    }
+
+    [Fact]
+    public async Task WriteFailureReportsWriteError()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            Task<Socket> accept = listener.AcceptSocketAsync();
+            using var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            await client.ConnectAsync(IPAddress.Loopback, port);
+            using Socket server = await accept;
+
+            var connection = new TcpConnection(client, new RpcOptions(), new TcpOptions());
+            var disconnected = new TaskCompletionSource<RpcDisconnectReason>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            connection.Disconnected += reason => disconnected.TrySetResult(reason);
+
+            // A disposed socket fails the drain before it writes a byte.
+            client.Dispose();
+            Assert.True(connection.TrySend(new byte[64]));
+
+            Assert.Equal(
+                RpcDisconnectReason.WriteError,
+                await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+        }
+        finally
+        {
+            listener.Stop();
+        }
+    }
+
+    [Fact]
+    public async Task HandshakeFailureReportsHandshakeFailed()
+    {
+        var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        try
+        {
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            var connection = new TcpClientConnection(
+                new RpcOptions(),
+                new TcpOptions
+                {
+                    Host = "127.0.0.1",
+                    Port = port,
+                    HandshakeTimeout = TimeSpan.FromMilliseconds(100),
+                });
+            var disconnected = new TaskCompletionSource<RpcDisconnectReason>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            connection.Disconnected += reason => disconnected.TrySetResult(reason);
+
+            // The listener accepts but never answers the handshake.
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => connection.ConnectAsync());
+
+            Assert.Equal(
+                RpcDisconnectReason.HandshakeFailed,
+                await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10)));
         }
         finally
         {

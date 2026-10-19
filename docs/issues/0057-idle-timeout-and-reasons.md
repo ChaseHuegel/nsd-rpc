@@ -1,7 +1,7 @@
 # Improvement: Idle timeout and disconnect reasons
 
 - Type: improvement
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem

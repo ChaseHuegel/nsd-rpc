@@ -9,7 +9,7 @@ internal sealed class InMemoryConnection : IRpcConnection
 {
     private readonly object _inboxLock = new();
     private readonly Queue<byte[]> _inbox = new();
-    private Action? _disconnectedHandlers;
+    private Action<RpcDisconnectReason>? _disconnectedHandlers;
     private RpcFrameHandler? _frameReceivedHandlers;
     private bool _disconnected;
 
@@ -23,12 +23,12 @@ internal sealed class InMemoryConnection : IRpcConnection
 
     public bool IsConnected => IsConnectedValue;
 
-    public void Close()
+    public void Close(RpcDisconnectReason reason = RpcDisconnectReason.LocalClose)
     {
-        Disconnect();
+        Disconnect(reason);
     }
 
-    public event Action Disconnected
+    public event Action<RpcDisconnectReason> Disconnected
     {
         add => _disconnectedHandlers += value;
         remove => _disconnectedHandlers -= value;
@@ -78,7 +78,7 @@ internal sealed class InMemoryConnection : IRpcConnection
         }
     }
 
-    public void Disconnect()
+    public void Disconnect(RpcDisconnectReason reason = RpcDisconnectReason.LocalClose)
     {
         if (_disconnected)
         {
@@ -87,7 +87,7 @@ internal sealed class InMemoryConnection : IRpcConnection
 
         _disconnected = true;
         IsConnectedValue = false;
-        _disconnectedHandlers?.Invoke();
+        _disconnectedHandlers?.Invoke(reason);
         _disconnectedHandlers = null;
     }
 

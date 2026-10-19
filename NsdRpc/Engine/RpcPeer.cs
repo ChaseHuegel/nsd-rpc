@@ -1257,7 +1257,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         }
     }
 
-    private void OnDisconnected()
+    private void OnDisconnected(RpcDisconnectReason reason)
     {
         FaultPending((int)RpcErrorCode.Unavailable, "connection closed");
     }

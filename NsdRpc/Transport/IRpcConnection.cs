@@ -8,8 +8,8 @@ public interface IRpcConnection
     /// <summary>True while the connection can send and receive.</summary>
     bool IsConnected { get; }
 
-    /// <summary>Closes the connection. Fires Disconnected once.</summary>
-    void Close();
+    /// <summary>Closes the connection. Fires Disconnected once with the reason.</summary>
+    void Close(RpcDisconnectReason reason = RpcDisconnectReason.LocalClose);
 
     /// <summary>
     /// Queues one complete frame for sending. Copies the bytes before it returns.
@@ -18,8 +18,8 @@ public interface IRpcConnection
     /// </summary>
     bool TrySend(ReadOnlySpan<byte> frame);
 
-    /// <summary>Fires once when the connection dies. The peer faults pending calls.</summary>
-    event Action Disconnected;
+    /// <summary>Fires once when the connection dies, with the reason.</summary>
+    event Action<RpcDisconnectReason> Disconnected;
 
     /// <summary>
     /// Fires from the transport's receive loop for each complete frame. The

@@ -5,20 +5,20 @@ namespace NsdRpc.Benchmarks;
 // measured work.
 internal sealed class InMemoryConnection : IRpcConnection
 {
-    private Action? _disconnectedHandlers;
+    private Action<RpcDisconnectReason>? _disconnectedHandlers;
     private RpcFrameHandler? _frameReceivedHandlers;
 
     public InMemoryConnection? Peer { get; set; }
 
     public bool IsConnected => true;
 
-    public void Close()
+    public void Close(RpcDisconnectReason reason = RpcDisconnectReason.LocalClose)
     {
-        _disconnectedHandlers?.Invoke();
+        _disconnectedHandlers?.Invoke(reason);
         _disconnectedHandlers = null;
     }
 
-    public event Action Disconnected
+    public event Action<RpcDisconnectReason> Disconnected
     {
         add => _disconnectedHandlers += value;
         remove => _disconnectedHandlers -= value;
