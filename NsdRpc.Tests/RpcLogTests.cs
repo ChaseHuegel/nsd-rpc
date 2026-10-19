@@ -46,6 +46,26 @@ public sealed class RpcLogTests
     }
 
     [Fact]
+    public void DropDeliversTheReasonWhenTheSwitchIsOn()
+    {
+        var listener = new CaptureListener();
+        SourceLevels previous = RpcLog.Source.Switch.Level;
+        RpcLog.Source.Switch.Level = SourceLevels.Warning;
+        RpcLog.Source.Listeners.Add(listener);
+        try
+        {
+            RpcLog.Drop(null, "reason text");
+
+            Assert.Contains("Dropped frame: reason text", listener.Text);
+        }
+        finally
+        {
+            RpcLog.Source.Listeners.Remove(listener);
+            RpcLog.Source.Switch.Level = previous;
+        }
+    }
+
+    [Fact]
     public void ASinkReceivesEventsWithoutATraceSourceListener()
     {
         var events = new List<string>();
