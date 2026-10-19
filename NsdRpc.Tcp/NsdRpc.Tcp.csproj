@@ -13,7 +13,7 @@
 
   <PropertyGroup>
     <PackageId>NsdRpc.Tcp</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Authors>Chase Huegel</Authors>
     <Description>A TCP transport for the nsd-rpc framework.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

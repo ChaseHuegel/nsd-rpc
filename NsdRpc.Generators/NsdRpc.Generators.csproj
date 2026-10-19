@@ -17,7 +17,7 @@
 
   <PropertyGroup>
     <PackageId>NsdRpc.Generators</PackageId>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <Authors>Chase Huegel</Authors>
     <Description>Source generator for NsdRpc: emits typed service clients from [RpcService] interfaces.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
