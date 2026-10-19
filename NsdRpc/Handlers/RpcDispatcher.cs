@@ -47,7 +47,7 @@ internal sealed class RpcDispatcher
         }
         catch (Exception exception)
         {
-            RpcLog.Error("handler failed", exception);
+            RpcLog.Error(_peer.LogSink, "handler failed", exception);
             FailRequest(context, (int)RpcErrorCode.InternalError, "internal error");
         }
         finally
@@ -75,9 +75,9 @@ internal sealed class RpcDispatcher
     {
         if (context.RequestId == 0UL)
         {
-            if (RpcLog.IsEnabled)
+            if (RpcLog.IsEnabled(_peer.LogSink))
             {
-                RpcLog.Drop("notification failed with " + code + ": " + message);
+                RpcLog.Drop(_peer.LogSink, "notification failed with " + code + ": " + message);
             }
 
             return;

@@ -28,7 +28,7 @@ internal sealed class HandlerEntry<TRequest, TResponse> : HandlerEntry
         {
             if (context.RequestId == 0UL)
             {
-                RpcLog.Drop("notification payload did not decode");
+                RpcLog.Drop(peer.LogSink, "notification payload did not decode");
                 return;
             }
 
@@ -42,9 +42,9 @@ internal sealed class HandlerEntry<TRequest, TResponse> : HandlerEntry
 
         if (!result.IsSuccess && result.ErrorCode > RpcErrorCodes.AppCodeMin)
         {
-            if (RpcLog.IsErrorEnabled)
+            if (RpcLog.IsErrorEnabled(peer.LogSink))
             {
-                RpcLog.Error(
+                RpcLog.Error(peer.LogSink, 
                     "handler used a reserved error code " + result.ErrorCode,
                     new InvalidOperationException("reserved error code"));
             }

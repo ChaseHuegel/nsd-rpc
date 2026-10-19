@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace NsdRpc;
 
 /// <summary>
@@ -20,6 +22,9 @@ public sealed class RpcOptions
 
     /// <summary>A monotonic timestamp source in nanoseconds. Tests inject a fake.</summary>
     public Func<long> TimestampNanos { get; set; } = RpcTime.NowNanos;
+
+    /// <summary>Receives drop and error events. Null sends them to the TraceSource.</summary>
+    public Action<TraceEventType, string, Exception?>? LogSink { get; set; }
 
     internal static RpcOptions Default { get; } = new();
 }

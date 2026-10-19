@@ -117,7 +117,7 @@ public sealed class RpcServer : IRpcHost
             }
             catch (Exception exception)
             {
-                RpcLog.Error("accept failed", exception);
+                RpcLog.Error(_options.LogSink, "accept failed", exception);
                 break;
             }
 

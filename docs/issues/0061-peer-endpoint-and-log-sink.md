@@ -17,21 +17,21 @@ A host cannot finish its operational surface on the public API.
 
 ## Acceptance criteria
 
-- [ ] `RpcPeer.RemoteEndPoint` returns the remote endpoint on the server
+- [x] `RpcPeer.RemoteEndPoint` returns the remote endpoint on the server
       side. It is null on the client side.
-- [ ] `RpcPeer.Close()` closes the peer's connection. The `Disconnected`
+- [x] `RpcPeer.Close()` closes the peer's connection. The `Disconnected`
       event fires once with `LocalClose`.
-- [ ] `RpcPeer.Connection` stays internal.
-- [ ] `RpcOptions.LogSink` accepts a delegate with a level, a message, and
+- [x] `RpcPeer.Connection` stays internal.
+- [x] `RpcOptions.LogSink` accepts a delegate with a level, a message, and
       an optional exception. Null keeps the TraceSource default. `RpcLog`
       stays internal.
-- [ ] No `Microsoft.Extensions.Logging` dependency.
-- [ ] A test proves `RemoteEndPoint` is available on the server and null on
+- [x] No `Microsoft.Extensions.Logging` dependency.
+- [x] A test proves `RemoteEndPoint` is available on the server and null on
       the client.
-- [ ] A test proves `RpcPeer.Close` fires `LocalClose` once.
-- [ ] A test proves a custom sink receives drop and error events.
-- [ ] The docs pass updates `rpc-api` and `quick-reference`.
-- [ ] No wire change.
+- [x] A test proves `RpcPeer.Close` fires `LocalClose` once.
+- [x] A test proves a custom sink receives drop and error events.
+- [x] The docs pass updates `rpc-api` and `quick-reference`.
+- [x] No wire change.
 
 ## Implementation notes
 
@@ -39,3 +39,13 @@ A host cannot finish its operational surface on the public API.
 - A sink that throws must not kill the dispatch thread. Catch and drop the
   sink failure.
 - `LogSink` reads at construction, like the other `RpcOptions` keys.
+
+## Resolution
+
+`RpcPeer.RemoteEndPoint` reads the client endpoint from a server connection
+and returns null on the client side. `RpcPeer.Close` closes the connection
+with `LocalClose`. The raw connection stays internal. `RpcOptions.LogSink`
+accepts the level, the message, and an optional exception, and a null sink
+keeps the TraceSource default. The sink is not gated by the TraceSource
+switch, and a throwing sink is contained. `RpcLog` stays internal. The
+library keeps zero runtime dependencies.

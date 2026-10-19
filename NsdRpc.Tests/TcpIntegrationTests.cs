@@ -1083,6 +1083,24 @@ public sealed class TcpIntegrationTests
     }
 
     [Fact]
+    public async Task ServerPeerReportsTheRemoteEndpoint()
+    {
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        Task<IServerConnection?> accept = transport.AcceptAsync();
+        var clientConnection = new TcpClientConnection(
+            new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
+        await clientConnection.ConnectAsync();
+        IServerConnection serverConnection = (await accept)!;
+        var client = new RpcPeer(clientConnection);
+        var server = new RpcPeer(serverConnection);
+
+        Assert.Null(client.RemoteEndPoint);
+        Assert.NotNull(server.RemoteEndPoint);
+        Assert.IsType<IPEndPoint>(server.RemoteEndPoint);
+        transport.Close();
+    }
+
+    [Fact]
     public async Task ReceiveOnceRentsAndReturnsTheBufferOnANormalRead()
     {
         (Socket client, Socket server) = await ConnectPairAsync();

@@ -46,22 +46,37 @@ public sealed class RpcLogTests
     }
 
     [Fact]
-    public void DropDeliversTheReasonWhenTheSwitchIsOn()
+    public void ASinkReceivesEventsWithoutATraceSourceListener()
     {
-        var listener = new CaptureListener();
+        var events = new List<string>();
         SourceLevels previous = RpcLog.Source.Switch.Level;
-        RpcLog.Source.Switch.Level = SourceLevels.Warning;
-        RpcLog.Source.Listeners.Add(listener);
+        RpcLog.Source.Switch.Level = SourceLevels.Off;
         try
         {
-            RpcLog.Drop("reason text");
-
-            Assert.Contains("Dropped frame: reason text", listener.Text);
+            RpcLog.Drop(
+                (level, message, exception) => events.Add(level + ":" + message),
+                "reason text");
+            RpcLog.Error(
+                (level, message, exception) => events.Add(level + ":" + message),
+                "error text",
+                new InvalidOperationException("boom"));
         }
         finally
         {
-            RpcLog.Source.Listeners.Remove(listener);
             RpcLog.Source.Switch.Level = previous;
         }
+
+        Assert.Contains("Warning:Dropped frame: reason text", events);
+        Assert.Contains("Error:error text", events);
+    }
+
+    [Fact]
+    public void AThrowingSinkIsContained()
+    {
+        Action<TraceEventType, string, Exception?> sink =
+            (level, message, exception) => throw new InvalidOperationException("sink failed");
+
+        RpcLog.Drop(sink, "reason text");
+        RpcLog.Error(sink, "error text", new InvalidOperationException("boom"));
     }
 }

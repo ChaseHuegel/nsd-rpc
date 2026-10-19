@@ -112,6 +112,7 @@ public sealed class RpcOptions
     public int MaxPendingCalls { get; set; } = 1024;
     public int MaxBufferedChunks { get; set; } = 1024;
     public Func<long> TimestampNanos { get; set; } = ...; // monotonic
+    public Action<TraceEventType, string, Exception?>? LogSink { get; set; } = null;
 }
 ```
 
@@ -189,6 +190,9 @@ public sealed class RpcPeer
     public void CheckTimeouts(long timestampNanos);
     public void FaultPending(int errorCode, string message);
     public void Poll();
+    public void Close();
+    public EndPoint? RemoteEndPoint { get; }
+    public RpcConnectionStats Stats { get; }
 }
 ```
 

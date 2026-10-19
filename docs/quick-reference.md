@@ -66,6 +66,8 @@ The engine for one connection. `RpcClient` and `RpcServer` expose it.
 | `HandleFrame(ReadOnlySpan<byte> frame)` | Feeds one frame. |
 | `CheckTimeouts(long timestampNanos)` / `Poll()` | Enforce the deadlines. |
 | `FaultPending(int errorCode, string message)` | Completes every pending call with the given error. |
+| `Close()` | Closes the peer's connection. The event fires with `LocalClose`. |
+| `RemoteEndPoint` | The client endpoint on the server side. Null on the client side. |
 | `Stats` | The connection counters, or zeros when the transport has none. |
 
 ### IRpcCaller and IRpcHost
@@ -201,6 +203,7 @@ Read at peer construction. Mutating it later is not supported.
 | `MaxPendingCalls` | 1024 | The most pending calls and inbound requests one peer tracks. |
 | `MaxBufferedChunks` | 1024 | The most chunks one stream session buffers. |
 | `TimestampNanos` | monotonic clock | A nanosecond timestamp source. |
+| `LogSink` | null (TraceSource) | Receives drop and error events: level, message, optional exception. |
 
 ### TcpOptions
 

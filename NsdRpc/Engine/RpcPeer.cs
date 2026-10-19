@@ -1,7 +1,9 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Net;
 using NsdRpc.Wire;
 
 namespace NsdRpc;
@@ -60,6 +62,17 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
     }
 
     internal IRpcConnection Connection => _connection;
+
+    internal Action<TraceEventType, string, Exception?>? LogSink => _options.LogSink;
+
+    /// <summary>The remote endpoint on the server side. Null on the client side.</summary>
+    public EndPoint? RemoteEndPoint => (_connection as IServerConnection)?.RemoteEndPoint;
+
+    /// <summary>Closes the peer's connection. The disconnect event fires with LocalClose.</summary>
+    public void Close()
+    {
+        _connection.Close(RpcDisconnectReason.LocalClose);
+    }
 
     /// <summary>The connection counters, or zeros when the transport has none.</summary>
     public RpcConnectionStats Stats =>
@@ -313,20 +326,20 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
 
         if (frame.Length > _options.MaxFrameBytes)
         {
-            RpcLog.Drop("frame exceeds MaxFrameBytes");
+            RpcLog.Drop(_options.LogSink, "frame exceeds MaxFrameBytes");
             return;
         }
 
         if (frame.Length < 4)
         {
-            RpcLog.Drop("frame without a length prefix");
+            RpcLog.Drop(_options.LogSink, "frame without a length prefix");
             return;
         }
 
         int length = BinaryPrimitives.ReadInt32LittleEndian(frame);
         if (length <= 0 || length != frame.Length - 4)
         {
-            RpcLog.Drop("frame length mismatch");
+            RpcLog.Drop(_options.LogSink, "frame length mismatch");
             return;
         }
 
@@ -337,13 +350,13 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         }
         catch (InvalidDataException)
         {
-            RpcLog.Drop("undecodable envelope");
+            RpcLog.Drop(_options.LogSink, "undecodable envelope");
             return;
         }
 
         if (envelope.Version != RpcVersion)
         {
-            RpcLog.Drop("unknown protocol version");
+            RpcLog.Drop(_options.LogSink, "unknown protocol version");
             FaultPending((int)RpcErrorCode.Unavailable, "protocol version mismatch");
             _connection.Close();
             return;
@@ -364,9 +377,9 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
                 HandleCancellation(in envelope);
                 break;
             default:
-                if (RpcLog.IsEnabled)
+                if (RpcLog.IsEnabled(_options.LogSink))
                 {
-                    RpcLog.Drop("unknown message kind " + envelope.Kind);
+                    RpcLog.Drop(_options.LogSink, "unknown message kind " + envelope.Kind);
                 }
 
                 break;
@@ -496,10 +509,10 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
                 SendResponseFrame(requestId, in result);
                 return;
             case InboundClaim.Cancelled:
-                RpcLog.Drop("response after cancellation");
+                RpcLog.Drop(_options.LogSink, "response after cancellation");
                 return;
             case InboundClaim.Faulted:
-                RpcLog.Drop("response after fault");
+                RpcLog.Drop(_options.LogSink, "response after fault");
                 return;
             default:
                 Invariant.Fail("response already sent for request " + requestId);
@@ -533,7 +546,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
                 return;
             case InboundClaim.Cancelled:
             case InboundClaim.Faulted:
-                RpcLog.Drop("error response after cancellation or fault");
+                RpcLog.Drop(_options.LogSink, "error response after cancellation or fault");
                 return;
             default:
                 Invariant.Fail("response already sent for request " + requestId);
@@ -547,7 +560,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         InboundStreamState state = CheckStreamState(requestId);
         if (state == InboundStreamState.Faulted)
         {
-            RpcLog.Drop("chunk after fault");
+            RpcLog.Drop(_options.LogSink, "chunk after fault");
             return;
         }
 
@@ -559,7 +572,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
 
         if (state == InboundStreamState.Cancelled)
         {
-            RpcLog.Drop("chunk after cancellation");
+            RpcLog.Drop(_options.LogSink, "chunk after cancellation");
             return;
         }
 
@@ -572,7 +585,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         InboundStreamState state = CheckStreamState(requestId);
         if (state == InboundStreamState.Faulted)
         {
-            RpcLog.Drop("chunk after fault");
+            RpcLog.Drop(_options.LogSink, "chunk after fault");
             return false;
         }
 
@@ -584,7 +597,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
 
         if (state == InboundStreamState.Cancelled)
         {
-            RpcLog.Drop("chunk after cancellation");
+            RpcLog.Drop(_options.LogSink, "chunk after cancellation");
             return false;
         }
 
@@ -820,7 +833,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         int size = envelope.GetSize();
         if (4 + size > _options.MaxFrameBytes)
         {
-            RpcLog.Drop("frame exceeds MaxFrameBytes");
+            RpcLog.Drop(_options.LogSink, "frame exceeds MaxFrameBytes");
             return false;
         }
 
@@ -877,7 +890,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         var envelope = new Envelope(RpcVersion, (byte)RpcMessageKind.Response, requestId, 0UL, payload, error);
         if (!SendEnvelope(in envelope))
         {
-            RpcLog.Drop("response send rejected");
+            RpcLog.Drop(_options.LogSink, "response send rejected");
         }
     }
 
@@ -889,7 +902,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
             RpcVersion, (byte)RpcMessageKind.Notification, requestId, method, payload, null);
         if (!SendEnvelope(in envelope))
         {
-            RpcLog.Drop("chunk send rejected");
+            RpcLog.Drop(_options.LogSink, "chunk send rejected");
             return false;
         }
 
@@ -901,7 +914,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         var envelope = new Envelope(RpcVersion, (byte)RpcMessageKind.Cancellation, id, 0UL, null, null);
         if (!SendEnvelope(in envelope))
         {
-            RpcLog.Drop("cancellation send rejected");
+            RpcLog.Drop(_options.LogSink, "cancellation send rejected");
         }
     }
 
@@ -911,7 +924,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         var envelope = new Envelope(RpcVersion, (byte)RpcMessageKind.Response, requestId, 0UL, null, error);
         if (!SendEnvelope(in envelope))
         {
-            RpcLog.Drop("error response send rejected");
+            RpcLog.Drop(_options.LogSink, "error response send rejected");
         }
     }
 
@@ -953,19 +966,19 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
     {
         if (envelope.Id == 0UL)
         {
-            RpcLog.Drop("request without id");
+            RpcLog.Drop(_options.LogSink, "request without id");
             return;
         }
 
         if (envelope.Method == 0UL)
         {
-            RpcLog.Drop("request without method");
+            RpcLog.Drop(_options.LogSink, "request without method");
             return;
         }
 
         if (envelope.Error != null)
         {
-            RpcLog.Drop("request with error");
+            RpcLog.Drop(_options.LogSink, "request with error");
             return;
         }
 
@@ -991,7 +1004,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
 
         if (duplicate)
         {
-            RpcLog.Drop("duplicate request id");
+            RpcLog.Drop(_options.LogSink, "duplicate request id");
             return;
         }
 
@@ -1009,13 +1022,13 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
     {
         if (envelope.Id == 0UL)
         {
-            RpcLog.Drop("response without id");
+            RpcLog.Drop(_options.LogSink, "response without id");
             return;
         }
 
         if (envelope.Method != 0UL)
         {
-            RpcLog.Drop("response with method");
+            RpcLog.Drop(_options.LogSink, "response with method");
             return;
         }
 
@@ -1024,7 +1037,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         {
             if (!_pending.TryGetValue(envelope.Id, out pending))
             {
-                RpcLog.Drop("unknown response id");
+                RpcLog.Drop(_options.LogSink, "unknown response id");
                 return;
             }
 
@@ -1058,13 +1071,13 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
     {
         if (envelope.Method == 0UL)
         {
-            RpcLog.Drop("notification without method");
+            RpcLog.Drop(_options.LogSink, "notification without method");
             return;
         }
 
         if (envelope.Error != null)
         {
-            RpcLog.Drop("notification with error");
+            RpcLog.Drop(_options.LogSink, "notification with error");
             return;
         }
 
@@ -1080,7 +1093,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
 
         if (!queued)
         {
-            RpcLog.Drop("dispatch queue full");
+            RpcLog.Drop(_options.LogSink, "dispatch queue full");
             return;
         }
 
@@ -1092,13 +1105,13 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
     {
         if (envelope.Method == 0UL)
         {
-            RpcLog.Drop("chunk without method");
+            RpcLog.Drop(_options.LogSink, "chunk without method");
             return;
         }
 
         if (envelope.Error != null)
         {
-            RpcLog.Drop("chunk with error");
+            RpcLog.Drop(_options.LogSink, "chunk with error");
             return;
         }
 
@@ -1108,7 +1121,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         {
             if (!_pending.TryGetValue(envelope.Id, out pending))
             {
-                RpcLog.Drop("unknown chunk id");
+                RpcLog.Drop(_options.LogSink, "unknown chunk id");
                 return;
             }
         }
@@ -1116,7 +1129,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         ChunkResult chunkResult = pending.ReceiveChunk(envelope.Payload);
         if (chunkResult == ChunkResult.NotAStream)
         {
-            RpcLog.Drop("chunk for a non-stream call");
+            RpcLog.Drop(_options.LogSink, "chunk for a non-stream call");
             return;
         }
 
@@ -1143,25 +1156,25 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
     {
         if (envelope.Id == 0UL)
         {
-            RpcLog.Drop("cancellation without id");
+            RpcLog.Drop(_options.LogSink, "cancellation without id");
             return;
         }
 
         if (envelope.Method != 0UL)
         {
-            RpcLog.Drop("cancellation with method");
+            RpcLog.Drop(_options.LogSink, "cancellation with method");
             return;
         }
 
         if (envelope.Payload != null)
         {
-            RpcLog.Drop("cancellation with payload");
+            RpcLog.Drop(_options.LogSink, "cancellation with payload");
             return;
         }
 
         if (envelope.Error != null)
         {
-            RpcLog.Drop("cancellation with error");
+            RpcLog.Drop(_options.LogSink, "cancellation with error");
             return;
         }
 
@@ -1177,7 +1190,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
 
         if (cancelSource == null)
         {
-            RpcLog.Drop("cancellation with unknown id");
+            RpcLog.Drop(_options.LogSink, "cancellation with unknown id");
             return;
         }
 
@@ -1255,7 +1268,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
 
             if (entry.Inbound != null && entry.Inbound.Cancelled)
             {
-                RpcLog.Drop("cancelled before dispatch");
+                RpcLog.Drop(_options.LogSink, "cancelled before dispatch");
                 continue;
             }
 
@@ -1282,7 +1295,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
             }
             catch (Exception exception)
             {
-                RpcLog.Error("dispatch hook failed", exception);
+                RpcLog.Error(_options.LogSink, "dispatch hook failed", exception);
                 if (entry.Inbound != null)
                 {
                     SendErrorResponseFrame(entry.Inbound.RequestId, (int)RpcErrorCode.InternalError, "internal error");

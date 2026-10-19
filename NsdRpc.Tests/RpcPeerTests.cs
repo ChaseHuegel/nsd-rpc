@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using NsdRpc;
 using NsdRpc.Wire;
 
@@ -1159,8 +1160,7 @@ public sealed class RpcPeerTests
     }
 
     [Fact]
-    public async Task TryStreamReturnsFalseWhenTheSendIsRejected()
-    {
+    public async Task TryStreamReturnsFalseWhenTheSendIsRejected()    {
         var connection = new InMemoryConnection();
         var peer = new RpcPeer(connection);
         bool streamed = true;
@@ -1212,6 +1212,60 @@ public sealed class RpcPeerTests
         Assert.Equal(
             2,
             Handshake.Deserialize((ReadOnlySpan<byte>)frames[0].Payload!).ProtocolVersion);
+    }
+
+    [Fact]
+    public async Task PeerRoutesDropAndErrorEventsToTheSink()
+    {
+        var events = new List<TraceEventType>();
+        var errorSeen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var options = new RpcOptions
+        {
+            LogSink = (level, message, exception) =>
+            {
+                lock (events)
+                {
+                    events.Add(level);
+                }
+
+                if (level == TraceEventType.Error)
+                {
+                    errorSeen.TrySetResult();
+                }
+            },
+        };
+        var peer = new RpcPeer(new InMemoryConnection(), options);
+
+        var unknown = new Envelope(1, 9, 0UL, 0UL, null, null);
+        RpcTestHelpers.Deliver(peer, in unknown);
+
+        peer.DispatchHook = (context, payload) => throw new InvalidOperationException("boom");
+        var request = new Envelope(
+            1, (byte)RpcMessageKind.Request, 1UL, EchoMethod, null, null);
+        RpcTestHelpers.Deliver(peer, in request);
+        await errorSeen.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        lock (events)
+        {
+            Assert.Contains(TraceEventType.Warning, events);
+            Assert.Contains(TraceEventType.Error, events);
+        }
+    }
+
+    [Fact]
+    public void PeerCloseFiresLocalClose()
+    {
+        var connection = new InMemoryConnection();
+        var peer = new RpcPeer(connection);
+        var reasons = new List<RpcDisconnectReason>();
+        connection.Disconnected += reason => reasons.Add(reason);
+
+        peer.Close();
+        peer.Close();
+
+        Assert.Single(reasons);
+        Assert.Equal(RpcDisconnectReason.LocalClose, reasons[0]);
+        Assert.False(connection.IsConnected);
     }
 
     [Fact]
