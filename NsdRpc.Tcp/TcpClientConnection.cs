@@ -68,7 +68,15 @@ public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink, IR
 
         var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
         socket.NoDelay = _tcpOptions.NoDelay;
-        await socket.ConnectAsync(_tcpOptions.Host, _tcpOptions.Port).ConfigureAwait(false);
+        try
+        {
+            await ConnectSocketAsync(socket).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            socket.Dispose();
+            throw;
+        }
 
         var connection = new TcpConnection(socket, _rpcOptions, _tcpOptions);
         connection.Disconnected += ForwardDisconnected;
@@ -85,6 +93,43 @@ public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink, IR
 
         _connection = connection;
         connection.StartReceiving();
+    }
+
+    private async Task ConnectSocketAsync(Socket socket)
+    {
+        if (_tcpOptions.ConnectTimeout <= TimeSpan.Zero)
+        {
+            await socket.ConnectAsync(_tcpOptions.Host, _tcpOptions.Port).ConfigureAwait(false);
+            return;
+        }
+
+        using var timeout = new CancellationTokenSource();
+        Task connect = socket.ConnectAsync(_tcpOptions.Host, _tcpOptions.Port);
+        Task delay = Task.Delay(ClampTimeout(_tcpOptions.ConnectTimeout), timeout.Token);
+        Task completed = await Task.WhenAny(connect, delay).ConfigureAwait(false);
+        timeout.Cancel();
+        if (completed != connect)
+        {
+            socket.Dispose();
+            // The timeout owns the result. Observe the abandoned connect fault.
+            _ = connect.ContinueWith(
+                static task => _ = task.Exception,
+                CancellationToken.None,
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            throw new TimeoutException(
+                "The connect to " + _tcpOptions.Host + ":" + _tcpOptions.Port
+                + " passed its deadline.");
+        }
+
+        await connect.ConfigureAwait(false);
+    }
+
+    // A token source rejects a delay above Int32.MaxValue milliseconds.
+    private static TimeSpan ClampTimeout(TimeSpan value)
+    {
+        TimeSpan max = TimeSpan.FromMilliseconds(int.MaxValue);
+        return value > max ? max : value;
     }
 
     private void ForwardDisconnected(RpcDisconnectReason reason)

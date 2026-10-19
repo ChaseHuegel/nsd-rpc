@@ -190,7 +190,7 @@ public sealed class TcpServerTransport : IRpcServerTransport
     {
         lock (_listenerLock)
         {
-            _listener ??= new TcpListener(IPAddress.Any, _tcpOptions.Port);
+            _listener ??= new TcpListener(_tcpOptions.BindAddress, _tcpOptions.Port);
             if (!_listenerStarted && !_closed)
             {
                 _listener.Start();

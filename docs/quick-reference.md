@@ -210,6 +210,8 @@ Read at transport construction.
 |---|---|---|
 | `Host` | `"localhost"` | The remote host for the client. The server ignores it. |
 | `Port` | 0 | The port. Zero binds an ephemeral port on the server. |
+| `BindAddress` | `IPAddress.Any` | The local address the listener binds. Null fails fast. |
+| `ConnectTimeout` | 10 seconds | The deadline for one connect attempt. Zero or negative disables it. |
 | `NoDelay` | `true` | Disables Nagle's algorithm. |
 | `HandshakeTimeout` | 10 seconds | The deadline for one handshake. Zero or negative disables it. |
 | `IdleTimeout` | `0` (disabled) | Closes the connection when no bytes arrive for this period. Zero or negative disables it. |

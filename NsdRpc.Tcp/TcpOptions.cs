@@ -1,3 +1,5 @@
+using System.Net;
+
 namespace NsdRpc.Tcp;
 
 /// <summary>
@@ -10,6 +12,12 @@ public sealed class TcpOptions
 
     /// <summary>The port. Zero binds an ephemeral port on the server.</summary>
     public int Port { get; set; } = 0;
+
+    /// <summary>The local address the listener binds. Defaults to IPAddress.Any.</summary>
+    public IPAddress BindAddress { get; set; } = IPAddress.Any;
+
+    /// <summary>The deadline for one connect attempt. Zero or negative disables it.</summary>
+    public TimeSpan ConnectTimeout { get; set; } = TimeSpan.FromSeconds(10);
 
     /// <summary>Disables Nagle's algorithm when true.</summary>
     public bool NoDelay { get; set; } = true;

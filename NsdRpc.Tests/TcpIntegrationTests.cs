@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using NsdRpc;
@@ -890,6 +891,46 @@ public sealed class TcpIntegrationTests
 
             connection.Close();
         }
+    }
+
+    [Fact]
+    public async Task ConnectTimeoutBoundsABlackholedRoute()
+    {
+        var connection = new TcpClientConnection(
+            new RpcOptions(),
+            new TcpOptions
+            {
+                Host = "192.0.2.1",
+                Port = 9,
+                ConnectTimeout = TimeSpan.FromMilliseconds(200),
+            });
+        var elapsed = Stopwatch.StartNew();
+
+        await Assert.ThrowsAsync<TimeoutException>(() => connection.ConnectAsync());
+
+        elapsed.Stop();
+        Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(5));
+        Assert.False(connection.IsConnected);
+    }
+
+    [Fact]
+    public async Task LoopbackBindAcceptsALoopbackClientOnTheReportedPort()
+    {
+        var transport = new TcpServerTransport(
+            new RpcOptions(), new TcpOptions { BindAddress = IPAddress.Loopback });
+        int port = transport.Port;
+        Assert.True(port > 0);
+
+        Task<IServerConnection?> accept = transport.AcceptAsync();
+        var client = new TcpClientConnection(
+            new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = port });
+        await client.ConnectAsync();
+        IServerConnection serverSide = (await accept)!;
+
+        Assert.True(serverSide.IsConnected);
+        Assert.True(client.IsConnected);
+        client.Close();
+        transport.Close();
     }
 
     [Fact]

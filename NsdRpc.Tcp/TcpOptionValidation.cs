@@ -5,6 +5,11 @@ internal static class TcpOptionValidation
 {
     public static void Validate(TcpOptions options)
     {
+        if (options.BindAddress == null)
+        {
+            throw new ArgumentNullException(nameof(options), "TcpOptions.BindAddress must not be null.");
+        }
+
         if (options.SendBacklogDisconnectBytes < 0)
         {
             throw new ArgumentOutOfRangeException(

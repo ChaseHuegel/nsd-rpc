@@ -130,6 +130,8 @@ The TCP transport options live in
 |---|---|---|
 | `Host` | `"localhost"` | The remote host for the client. The server ignores it. |
 | `Port` | `0` | The port. Zero binds an ephemeral port on the server. |
+| `BindAddress` | `IPAddress.Any` | The local address the listener binds. Null fails fast. |
+| `ConnectTimeout` | 10 seconds | The deadline for one connect attempt. Zero or negative disables it. |
 | `NoDelay` | `true` | Disables Nagle's algorithm. |
 | `HandshakeTimeout` | 10 seconds | The deadline for one handshake. Zero or negative disables it. |
 | `IdleTimeout` | `0` (disabled) | Closes the connection when no bytes arrive for this period. Zero or negative disables it. |
@@ -146,7 +148,8 @@ drain. It uses the monotonic timestamp source and no timer.
 
 The server transport completes each handshake in the background. A silent
 client does not stall the other clients. A handshake that passes its
-deadline closes the connection.
+deadline closes the connection. `ConnectAsync` throws `TimeoutException` when
+the connect passes `ConnectTimeout`. The listener binds `BindAddress`.
 
 The idle timeout measures received bytes, not sent bytes. A send-only
 consumer must send keepalives or disable the key. A silent peer closes with

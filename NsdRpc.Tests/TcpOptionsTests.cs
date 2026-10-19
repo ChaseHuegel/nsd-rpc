@@ -1,3 +1,4 @@
+using System.Net;
 using NsdRpc;
 using NsdRpc.Tcp;
 
@@ -12,6 +13,8 @@ public sealed class TcpOptionsTests
 
         Assert.Equal("localhost", options.Host);
         Assert.Equal(0, options.Port);
+        Assert.Equal(IPAddress.Any, options.BindAddress);
+        Assert.Equal(TimeSpan.FromSeconds(10), options.ConnectTimeout);
         Assert.True(options.NoDelay);
         Assert.Equal(TimeSpan.FromSeconds(10), options.HandshakeTimeout);
         Assert.Equal(TimeSpan.Zero, options.IdleTimeout);
@@ -20,6 +23,15 @@ public sealed class TcpOptionsTests
         Assert.Equal(1048576, options.SendQueueBytes);
         Assert.Equal(0, options.SendBacklogDisconnectBytes);
         Assert.Equal(0, options.SendBacklogDisconnectMs);
+    }
+
+    [Fact]
+    public void NullBindAddressFailsFast()
+    {
+        var tcpOptions = new TcpOptions { BindAddress = null! };
+
+        Assert.Throws<ArgumentNullException>(
+            () => new TcpServerTransport(new RpcOptions(), tcpOptions));
     }
 
     [Fact]
