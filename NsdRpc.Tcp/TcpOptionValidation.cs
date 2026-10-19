@@ -28,6 +28,18 @@ internal static class TcpOptionValidation
                 nameof(options), "SendBacklogDisconnectMs must not be negative.");
         }
 
+        if (options.SendBatchInterval < TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options), "SendBatchInterval must not be negative.");
+        }
+
+        if (options.SendBatchMaxBytes < 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options), "SendBatchMaxBytes must be positive.");
+        }
+
         if ((options.SendBacklogDisconnectBytes == 0) != (options.SendBacklogDisconnectMs == 0))
         {
             throw new ArgumentException(

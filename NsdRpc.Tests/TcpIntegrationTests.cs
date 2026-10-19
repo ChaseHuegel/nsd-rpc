@@ -934,6 +934,155 @@ public sealed class TcpIntegrationTests
     }
 
     [Fact]
+    public async Task BatchedFramesProduceOneWrite()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var tcpOptions = new TcpOptions
+            {
+                SendBatchInterval = TimeSpan.FromMilliseconds(50),
+                SendBatchMaxBytes = 65536,
+            };
+            var connection = new TcpConnection(client, new RpcOptions(), tcpOptions);
+
+            for (int index = 0; index < 16; index++)
+            {
+                Assert.True(connection.TrySend(Frame(BitConverter.GetBytes(index))));
+            }
+
+            for (int index = 0; index < 16; index++)
+            {
+                byte[] payload = await ReadFrameAsync(server).WaitAsync(TimeSpan.FromSeconds(10));
+                Assert.Equal(index, BinaryPrimitives.ReadInt32LittleEndian(payload));
+            }
+
+            RpcConnectionStats stats = connection.Stats;
+            Assert.Equal(16, stats.PacketsSent);
+            Assert.Equal(1, stats.Writes);
+            connection.Close();
+        }
+    }
+
+    [Fact]
+    public async Task BatchByteLimitIsRespected()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var tcpOptions = new TcpOptions
+            {
+                SendBatchInterval = TimeSpan.FromMilliseconds(50),
+                SendBatchMaxBytes = 24,
+            };
+            var connection = new TcpConnection(client, new RpcOptions(), tcpOptions);
+
+            for (int index = 0; index < 8; index++)
+            {
+                Assert.True(connection.TrySend(Frame(BitConverter.GetBytes(index))));
+            }
+
+            for (int index = 0; index < 8; index++)
+            {
+                byte[] payload = await ReadFrameAsync(server).WaitAsync(TimeSpan.FromSeconds(10));
+                Assert.Equal(index, BinaryPrimitives.ReadInt32LittleEndian(payload));
+            }
+
+            RpcConnectionStats stats = connection.Stats;
+            Assert.Equal(8, stats.PacketsSent);
+            Assert.Equal(3, stats.Writes);
+            connection.Close();
+        }
+    }
+
+    [Fact]
+    public async Task FrameLargerThanTheBatchLimitIsWrittenAlone()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var tcpOptions = new TcpOptions
+            {
+                SendBatchInterval = TimeSpan.FromMilliseconds(50),
+                SendBatchMaxBytes = 16,
+            };
+            var connection = new TcpConnection(client, new RpcOptions(), tcpOptions);
+
+            Assert.True(connection.TrySend(Frame(new byte[1020])));
+            Assert.True(connection.TrySend(Frame(new byte[4])));
+
+            byte[] large = await ReadFrameAsync(server).WaitAsync(TimeSpan.FromSeconds(10));
+            byte[] small = await ReadFrameAsync(server).WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.Equal(1020, large.Length);
+            Assert.Equal(4, small.Length);
+            Assert.Equal(2, connection.Stats.PacketsSent);
+            Assert.Equal(2, connection.Stats.Writes);
+            connection.Close();
+        }
+    }
+
+    [Fact]
+    public async Task ZeroBatchIntervalWritesOneFramePerWrite()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var connection = new TcpConnection(client, new RpcOptions(), new TcpOptions());
+
+            for (int index = 0; index < 4; index++)
+            {
+                Assert.True(connection.TrySend(Frame(BitConverter.GetBytes(index))));
+            }
+
+            for (int index = 0; index < 4; index++)
+            {
+                byte[] payload = await ReadFrameAsync(server).WaitAsync(TimeSpan.FromSeconds(10));
+                Assert.Equal(index, BinaryPrimitives.ReadInt32LittleEndian(payload));
+            }
+
+            RpcConnectionStats stats = connection.Stats;
+            Assert.Equal(4, stats.PacketsSent);
+            Assert.Equal(4, stats.Writes);
+            connection.Close();
+        }
+    }
+
+    [Fact]
+    public async Task FullBatchWakesTheWaitBeforeTheInterval()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var tcpOptions = new TcpOptions
+            {
+                SendBatchInterval = TimeSpan.FromSeconds(5),
+                SendBatchMaxBytes = 32,
+            };
+            var connection = new TcpConnection(client, new RpcOptions(), tcpOptions);
+
+            for (int index = 0; index < 4; index++)
+            {
+                Assert.True(connection.TrySend(Frame(BitConverter.GetBytes(index))));
+            }
+
+            // The batch is full, so the signal wakes the wait long before 5s.
+            for (int index = 0; index < 4; index++)
+            {
+                await ReadFrameAsync(server).WaitAsync(TimeSpan.FromSeconds(2));
+            }
+
+            Assert.Equal(1, connection.Stats.Writes);
+            connection.Close();
+        }
+    }
+
+    [Fact]
     public async Task ReceiveOnceRentsAndReturnsTheBufferOnANormalRead()
     {
         (Socket client, Socket server) = await ConnectPairAsync();

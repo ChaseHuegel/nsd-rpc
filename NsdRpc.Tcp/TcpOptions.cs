@@ -37,6 +37,12 @@ public sealed class TcpOptions
     /// <summary>The largest queued send bytes per connection. A full queue rejects sends.</summary>
     public int SendQueueBytes { get; set; } = 1048576;
 
+    /// <summary>Coalesces queued frames for this interval into one write. Zero sends immediately.</summary>
+    public TimeSpan SendBatchInterval { get; set; } = TimeSpan.Zero;
+
+    /// <summary>The largest bytes in one batched write. A larger frame is written alone.</summary>
+    public int SendBatchMaxBytes { get; set; } = 65536;
+
     /// <summary>The queued send bytes that start the backlog window. Zero disables the check.</summary>
     public int SendBacklogDisconnectBytes { get; set; } = 0;
 

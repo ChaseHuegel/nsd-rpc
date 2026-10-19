@@ -42,6 +42,7 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink, IRpcConne
     private int _idleSweepRunning;
     private long _lastReadNanos;
     private RpcDisconnectReason _receiveDisconnectReason = RpcDisconnectReason.ReadError;
+    private TaskCompletionSource<bool>? _batchWaiter;
 
     public TcpConnection(Socket socket, RpcOptions rpcOptions, TcpOptions tcpOptions)
         : this(socket, rpcOptions, tcpOptions, ArrayPool<byte>.Shared)
@@ -154,6 +155,13 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink, IRpcConne
             }
 
             closeForBacklog = _backlog.ExceedsWindow(_queuedBytes, _rpcOptions.TimestampNanos());
+            if (!closeForBacklog
+                && _batchWaiter != null
+                && _queuedBytes >= _tcpOptions.SendBatchMaxBytes)
+            {
+                _batchWaiter.TrySetResult(true);
+                _batchWaiter = null;
+            }
             if (!closeForBacklog && !_sending)
             {
                 _sending = true;
@@ -219,47 +227,176 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink, IRpcConne
     {
         while (true)
         {
-            SendBuffer buffer;
-            bool closeForBacklog;
-            lock (_sendLock)
+            if (_tcpOptions.SendBatchInterval > TimeSpan.Zero)
             {
-                if (_sendQueue.Count == 0)
+                await WaitForBatchAsync().ConfigureAwait(false);
+                if (!await SendBatchAsync().ConfigureAwait(false))
                 {
-                    _sending = false;
                     return;
                 }
-
-                buffer = _sendQueue.Dequeue();
-                _queuedBytes -= buffer.Length;
-                closeForBacklog = _backlog.ExceedsWindow(
-                    _queuedBytes, _rpcOptions.TimestampNanos());
             }
-
-            if (closeForBacklog)
+            else
             {
-                ReturnBuffer(buffer);
-                ReturnQueuedBuffers();
-                FireDisconnected(RpcDisconnectReason.BacklogLimit);
-                return;
+                if (!await SendOneAsync().ConfigureAwait(false))
+                {
+                    return;
+                }
             }
-
-            try
-            {
-                int writes = await SendAllAsync(buffer, _lifetime.Token).ConfigureAwait(false);
-                Interlocked.Add(ref _writes, writes);
-                Interlocked.Increment(ref _packetsSent);
-                Interlocked.Add(ref _bytesSent, buffer.Length);
-            }
-            catch (Exception)
-            {
-                ReturnBuffer(buffer);
-                ReturnQueuedBuffers();
-                FireDisconnected(RpcDisconnectReason.WriteError);
-                return;
-            }
-
-            ReturnBuffer(buffer);
         }
+    }
+
+    // Waits the batch interval, or until the queue holds a full batch. The
+    // connection's lifetime cancels the wait.
+    private async Task WaitForBatchAsync()
+    {
+        Task? signal = null;
+        lock (_sendLock)
+        {
+            if (_sendQueue.Count == 0)
+            {
+                return;
+            }
+
+            if (_queuedBytes >= _tcpOptions.SendBatchMaxBytes)
+            {
+                return;
+            }
+
+            _batchWaiter = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            signal = _batchWaiter.Task;
+        }
+
+        Task delay = Task.Delay(ClampDelay(_tcpOptions.SendBatchInterval), _lifetime.Token);
+        await Task.WhenAny(delay, signal).ConfigureAwait(false);
+        lock (_sendLock)
+        {
+            _batchWaiter = null;
+        }
+    }
+
+    // Drains up to SendBatchMaxBytes into one pooled buffer and writes once. A
+    // frame larger than the limit is written alone.
+    private async Task<bool> SendBatchAsync()
+    {
+        byte[] batch;
+        int count;
+        int bytes;
+        bool closeForBacklog;
+        lock (_sendLock)
+        {
+            if (_sendQueue.Count == 0)
+            {
+                _sending = false;
+                return false;
+            }
+
+            int limit = _tcpOptions.SendBatchMaxBytes;
+            count = 0;
+            bytes = 0;
+            foreach (SendBuffer queued in _sendQueue)
+            {
+                if (count > 0 && bytes + queued.Length > limit)
+                {
+                    break;
+                }
+
+                bytes += queued.Length;
+                count++;
+                if (queued.Length > limit)
+                {
+                    break;
+                }
+            }
+
+            batch = ArrayPool<byte>.Shared.Rent(bytes);
+            int offset = 0;
+            for (int index = 0; index < count; index++)
+            {
+                SendBuffer buffer = _sendQueue.Dequeue();
+                _queuedBytes -= buffer.Length;
+                buffer.Frame.AsSpan(0, buffer.Length).CopyTo(batch.AsSpan(offset));
+                offset += buffer.Length;
+                ReturnBuffer(buffer);
+            }
+
+            closeForBacklog = _backlog.ExceedsWindow(
+                _queuedBytes, _rpcOptions.TimestampNanos());
+        }
+
+        if (closeForBacklog)
+        {
+            ArrayPool<byte>.Shared.Return(batch, clearArray: true);
+            ReturnQueuedBuffers();
+            FireDisconnected(RpcDisconnectReason.BacklogLimit);
+            return false;
+        }
+
+        try
+        {
+            int writes = await SendAllAsync(
+                new SendBuffer(batch, bytes, pooled: true), _lifetime.Token).ConfigureAwait(false);
+            Interlocked.Add(ref _writes, writes);
+            Interlocked.Add(ref _packetsSent, count);
+            Interlocked.Add(ref _bytesSent, bytes);
+        }
+        catch (Exception)
+        {
+            ReturnQueuedBuffers();
+            FireDisconnected(RpcDisconnectReason.WriteError);
+            return false;
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(batch, clearArray: true);
+        }
+
+        return true;
+    }
+
+    // Sends one queued frame and writes once. This is the zero-interval path.
+    private async Task<bool> SendOneAsync()
+    {
+        SendBuffer buffer;
+        bool closeForBacklog;
+        lock (_sendLock)
+        {
+            if (_sendQueue.Count == 0)
+            {
+                _sending = false;
+                return false;
+            }
+
+            buffer = _sendQueue.Dequeue();
+            _queuedBytes -= buffer.Length;
+            closeForBacklog = _backlog.ExceedsWindow(
+                _queuedBytes, _rpcOptions.TimestampNanos());
+        }
+
+        if (closeForBacklog)
+        {
+            ReturnBuffer(buffer);
+            ReturnQueuedBuffers();
+            FireDisconnected(RpcDisconnectReason.BacklogLimit);
+            return false;
+        }
+
+        try
+        {
+            int writes = await SendAllAsync(buffer, _lifetime.Token).ConfigureAwait(false);
+            Interlocked.Add(ref _writes, writes);
+            Interlocked.Increment(ref _packetsSent);
+            Interlocked.Add(ref _bytesSent, buffer.Length);
+        }
+        catch (Exception)
+        {
+            ReturnBuffer(buffer);
+            ReturnQueuedBuffers();
+            FireDisconnected(RpcDisconnectReason.WriteError);
+            return false;
+        }
+
+        ReturnBuffer(buffer);
+        return true;
     }
 
     // Returns a buffer to the pool. The copy path owns a plain array, so it

@@ -17,7 +17,7 @@ add or work an issue.
 - [x] [Idle timeout and disconnect reasons](/docs/issues/0057-idle-timeout-and-reasons.md) — detect a half-open peer and report why it closed.
 - [x] [Connection metrics](/docs/issues/0058-connection-metrics.md) — frames, bytes, queue depth, and rejected sends.
 - [x] [Connect timeout and bind address](/docs/issues/0059-connect-timeout-and-bind-address.md) — bound connect and choose the listen interface.
-- [ ] [Send batching](/docs/issues/0060-send-batching.md) — one write per interval instead of one write per frame.
+- [x] [Send batching](/docs/issues/0060-send-batching.md) — one write per interval instead of one write per frame.
 - [ ] [Peer endpoint, peer close, and log sink](/docs/issues/0061-peer-endpoint-and-log-sink.md) — a host reads the endpoint, disconnects one peer, and attaches a logger.
 - [x] [Server targets peers, not a broadcast](/docs/issues/0055-server-peer-targeting.md) — remove the server broadcast surface and select peers explicitly.
 - [x] [Rent the TCP receive buffer per read](/docs/issues/0052-tcp-receive-buffer-per-read.md) — hold no receive buffer while a connection is idle.

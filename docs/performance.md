@@ -30,6 +30,7 @@ The suite covers the paths the Backlog performance issues touch.
 | `DropPathBenchmarks` | One dropped frame with an unknown kind |
 | `PeerConstructionBenchmarks` | One peer construction |
 | `TcpRoundTripBenchmarks` | One round trip over loopback at 4 bytes and 4 kilobytes |
+| `TcpSendBatchBenchmarks` | 4,096 small frames over loopback with and without a 1 ms send batch interval |
 
 The in-memory benchmarks use a synchronous connection. The engine path is
 the measured work. The TCP benchmarks use loopback sockets. The peer
@@ -97,6 +98,20 @@ BenchmarkDotNet version. Every Active Sprint performance issue is fixed.
 The maximum-payload codec is unchanged. Issue
 [0027](issues/0027-generated-payload-memcpy.md) tracks the upstream copy
 loop, so its two rows differ by less than the baseline spread.
+
+## Send batching
+
+Run: 2026-10-19, `--filter '*TcpSendBatch*'`, the same machine. The benchmark
+sends 4,096 eight-byte frames over loopback and reads the whole stream.
+
+| Benchmark | Mean | Allocated | Socket writes |
+|---|---:|---:|---:|
+| `TcpSendBatchBenchmarks.SendImmediately` | 27.98 ms | 141.86 KB | 4,096 |
+| `TcpSendBatchBenchmarks.SendBatched` (1 ms interval) | 1.219 ms | 129.02 KB | 1 |
+
+The batched path is 23 times faster. The interval costs one millisecond per
+batch. The write counts come from the batch tests, which pin one write for a
+full batch. The benchmark records the throughput.
 
 The send path dropped about 8.4 KB per 4-kilobyte round trip. The first
 comparison run missed it: the peer holds the public `TcpClientConnection` or

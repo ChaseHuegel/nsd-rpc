@@ -140,11 +140,18 @@ The TCP transport options live in
 | `SendQueueBytes` | 1,048,576 | The largest queued send bytes for one connection. A full queue rejects the send. |
 | `SendBacklogDisconnectBytes` | `0` (disabled) | The queued send bytes that start the backlog window. Must not exceed `SendQueueBytes`. |
 | `SendBacklogDisconnectMs` | `0` (disabled) | The window for the backlog disconnect. The two backlog keys must both be zero or both be positive. |
+| `SendBatchInterval` | `0` (disabled) | Coalesces queued frames for this interval into one write. Zero sends immediately. |
+| `SendBatchMaxBytes` | 65,536 | The largest bytes in one batched write. A larger frame is written alone. |
 
 The send backlog disconnect is opt-in. When the queued send bytes stay at or
 above `SendBacklogDisconnectBytes` for `SendBacklogDisconnectMs`, the
 connection closes with `BacklogLimit`. The check runs on enqueue and on
 drain. It uses the monotonic timestamp source and no timer.
+
+Send batching is opt-in. With a positive `SendBatchInterval`, the drain waits
+the interval for more frames, then writes up to `SendBatchMaxBytes` in one
+call. A frame larger than the limit is written alone. A full batch wakes the
+wait early. Zero keeps one write per frame.
 
 The server transport completes each handshake in the background. A silent
 client does not stall the other clients. A handshake that passes its

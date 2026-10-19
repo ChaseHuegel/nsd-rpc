@@ -21,6 +21,8 @@ public sealed class TcpOptionsTests
         Assert.Equal(65536, options.ReceiveBufferBytes);
         Assert.Equal(TimeSpan.FromSeconds(30), options.DecoderIdleShrinkAfter);
         Assert.Equal(1048576, options.SendQueueBytes);
+        Assert.Equal(TimeSpan.Zero, options.SendBatchInterval);
+        Assert.Equal(65536, options.SendBatchMaxBytes);
         Assert.Equal(0, options.SendBacklogDisconnectBytes);
         Assert.Equal(0, options.SendBacklogDisconnectMs);
     }

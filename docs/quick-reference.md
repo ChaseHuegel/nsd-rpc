@@ -220,6 +220,8 @@ Read at transport construction.
 | `SendQueueBytes` | 1048576 | The largest queued send bytes per connection. A full queue rejects sends. |
 | `SendBacklogDisconnectBytes` | `0` (disabled) | The queued send bytes that start the backlog window. Must not exceed `SendQueueBytes`. |
 | `SendBacklogDisconnectMs` | `0` (disabled) | The window for the backlog disconnect. The two backlog keys must both be zero or both be positive. |
+| `SendBatchInterval` | `0` (disabled) | Coalesces queued frames for this interval into one write. Zero sends immediately. |
+| `SendBatchMaxBytes` | 65536 | The largest bytes in one batched write. A larger frame is written alone. |
 
 ## TCP transport
 
