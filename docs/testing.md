@@ -61,12 +61,12 @@ The wire tests pin the generated types against the contract in
 The engine tests pin the protocol rules in
 [rpc-protocol](specs/rpc-protocol.md):
 
-- [RpcPeerTests.cs](../NsdRpc.Tests/RpcPeerTests.cs:6) pins correlation,
+- [RpcPeerTests.cs](../NsdRpc.Tests/RpcPeerTests.cs:8) pins correlation,
   out-of-order responses, timeouts against a fake clock, cancellation, faults,
   streaming, the `TryStream` result, the log sink, the peer close, keep-alive,
   the malformed frame and envelope rules, the drop-and-log rules, the
   dispatch fallbacks, and the argument guards.
-- [PayloadDecodeTests.cs](../NsdRpc.Tests/PayloadDecodeTests.cs:6) pins the
+- [PayloadDecodeTests.cs](../NsdRpc.Tests/PayloadDecodeTests.cs:9) pins the
   decode boundary: a reader failure maps to `InvalidParams` for a request,
   a drop and log for a notification, and a failed call for a chunk. The
   connection stays open.
@@ -86,13 +86,14 @@ The transport tests pin the TCP layer:
 
 - [TcpFrameDecoderTests.cs](../NsdRpc.Tests/TcpFrameDecoderTests.cs:6) pins
   the framing contract, buffer growth, the cap, the idle shrink, and fuzzing.
-- [TcpIntegrationTests.cs](../NsdRpc.Tests/TcpIntegrationTests.cs:10) pins
+- [TcpIntegrationTests.cs](../NsdRpc.Tests/TcpIntegrationTests.cs:13) pins
   the handshake and round trips over loopback sockets, the bad-handshake skip, the
   handshake framing errors, the connect timeout, the bind address, the
   send-queue bound, the send backlog policy, the send batching policy,
   the disconnect paths and their reasons, the idle timeout and its reset on a read, the per-read
   receive buffer rent and return, the idle connection holding no receive
-  buffer, and the decoder idle shrink gate and no-thrash rule.
+  buffer, the remote endpoint, and the decoder idle shrink gate and no-thrash
+  rule.
 - [ConnectionStatsTests.cs](../NsdRpc.Tests/ConnectionStatsTests.cs:9) pins the
   exact counters for a known exchange, the queue depth and peak under a
   stalled read, the concurrent rejected-send count, and the peer default

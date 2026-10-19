@@ -20,19 +20,19 @@ chunk can kill the connection.
 
 ## Acceptance criteria
 
-- [ ] Any exception from the payload deserializer maps to a decode failure.
-- [ ] A request payload failure answers `InvalidParams`.
-- [ ] A notification payload failure is dropped and logged.
-- [ ] A chunk payload failure follows the documented stream rule. State the
+- [x] Any exception from the payload deserializer maps to a decode failure.
+- [x] A request payload failure answers `InvalidParams`.
+- [x] A notification payload failure is dropped and logged.
+- [x] A chunk payload failure follows the documented stream rule. State the
       rule in `rpc-api` and test it.
-- [ ] The connection stays open.
-- [ ] The fix restores the documented `TryDeserialize` contract from
+- [x] The connection stays open.
+- [x] The fix restores the documented `TryDeserialize` contract from
       `rpc-api`: it never throws.
-- [ ] The wire carries no exception detail.
-- [ ] Tests cover a truncated payload, a length that exceeds the buffer, and a
+- [x] The wire carries no exception detail.
+- [x] Tests cover a truncated payload, a length that exceeds the buffer, and a
       valid frame with a corrupt payload.
-- [ ] The docs pass updates `rpc-api` and the `rpc-protocol` error table.
-- [ ] No wire change.
+- [x] The docs pass updates `rpc-api` and the `rpc-protocol` error table.
+- [x] No wire change.
 
 ## Implementation notes
 
@@ -41,3 +41,12 @@ chunk can kill the connection.
 - The library must not depend on a specific nsdc exception type.
 - Coordinate with the downstream nsdc unpack safety work. The library stays
   correct even when the generated reader throws an index error.
+
+## Resolution
+
+`NsdPayloadSerializer.TryDeserialize` treats every reader exception except
+`OutOfMemoryException` and `StackOverflowException` as a decode failure. A
+request answers `InvalidParams`, a notification is dropped and logged, and a
+chunk fails the call with `InvalidRequest`. The connection stays open. The
+tests cover a throwing reader, a truncated payload, and an oversized payload
+length.

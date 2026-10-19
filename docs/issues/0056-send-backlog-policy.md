@@ -21,33 +21,33 @@ Close a peer that cannot drain its backlog.
 
 ## Acceptance criteria
 
-- [ ] The transport has one reliable send queue. There is no send class and no
+- [x] The transport has one reliable send queue. There is no send class and no
       priority lane. No accepted frame is dropped.
-- [ ] `SendQueueBytes` remains a hard safety cap. A send at the cap fails.
+- [x] `SendQueueBytes` remains a hard safety cap. A send at the cap fails.
       The caller treats the failure as a peer failure.
-- [ ] `TcpOptions.SendBacklogDisconnectBytes` and
+- [x] `TcpOptions.SendBacklogDisconnectBytes` and
       `TcpOptions.SendBacklogDisconnectMs` exist. Both default to zero, which
       disables the disconnect. A consumer opts in. The byte threshold must
       not exceed `SendQueueBytes`. Construction fails fast when it does.
-- [ ] If the queued bytes stay at or above the threshold for the window, the
+- [x] If the queued bytes stay at or above the threshold for the window, the
       connection closes with `BacklogLimit`.
-- [ ] The backlog check runs on enqueue and on drain. It uses the monotonic
+- [x] The backlog check runs on enqueue and on drain. It uses the monotonic
       timestamp source. There is no timer per connection.
-- [ ] `RpcContext.TryStream<TChunk>(in TChunk chunk)` returns false when the
+- [x] `RpcContext.TryStream<TChunk>(in TChunk chunk)` returns false when the
       send is rejected by a full queue or a closed connection. Misuse, a
       chunk after `Respond` or after a cancellation, still asserts, like
       `Stream`. `rpc-api` states the difference.
-- [ ] A test proves a transient spike that drains inside the window keeps
+- [x] A test proves a transient spike that drains inside the window keeps
       the connection open.
-- [ ] A test proves a sustained backlog closes the connection with
+- [x] A test proves a sustained backlog closes the connection with
       `BacklogLimit`.
-- [ ] A test proves an accepted reliable frame is never dropped.
-- [ ] A test proves a rejected `TryStream` is observable to the handler.
-- [ ] No test sleeps. Use a short configured window and a deterministic
+- [x] A test proves an accepted reliable frame is never dropped.
+- [x] A test proves a rejected `TryStream` is observable to the handler.
+- [x] No test sleeps. Use a short configured window and a deterministic
       signal.
-- [ ] The docs pass updates the TCP options tables in `rpc-api` and
+- [x] The docs pass updates the TCP options tables in `rpc-api` and
       `quick-reference`.
-- [ ] No wire change.
+- [x] No wire change.
 
 ## Implementation notes
 
@@ -59,3 +59,13 @@ Close a peer that cannot drain its backlog.
   remaining backlog window, so the drain-side check here stays prompt.
 - A future UDP transport can add unreliable classes. That is out of scope
   here.
+
+## Resolution
+
+The transport keeps one reliable send queue. `SendBacklogDisconnectBytes` and
+`SendBacklogDisconnectMs` default to zero, which disables the policy. When
+enabled, the tracker starts the window on the first enqueue or drain at or
+above the threshold and closes with `BacklogLimit` after the whole window.
+The check uses the monotonic clock and runs on enqueue and drain.
+`RpcContext.TryStream` returns the send result, and `Stream` keeps the assert
+behavior.

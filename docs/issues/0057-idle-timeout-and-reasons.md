@@ -19,38 +19,38 @@ The handshake has a deadline. The receive loop does not.
 
 ## Acceptance criteria
 
-- [ ] `RpcDisconnectReason` has `PeerClosed`, `ReadError`, `WriteError`,
+- [x] `RpcDisconnectReason` has `PeerClosed`, `ReadError`, `WriteError`,
       `IdleTimeout`, `HandshakeFailed`, `BacklogLimit`, `LocalClose`, and
       `ProtocolViolation`.
-- [ ] `TcpOptions.IdleTimeout` defaults to zero, which disables it. A
+- [x] `TcpOptions.IdleTimeout` defaults to zero, which disables it. A
       positive value enables it. The key appears in the docs tables.
-- [ ] The receive loop arms a deadline for each wait only when `IdleTimeout`
+- [x] The receive loop arms a deadline for each wait only when `IdleTimeout`
       is enabled. The default path allocates nothing per wait.
-- [ ] On expiry, the connection closes and fires `Disconnected` once with
+- [x] On expiry, the connection closes and fires `Disconnected` once with
       `IdleTimeout`.
-- [ ] `IRpcConnection.Disconnected` becomes
+- [x] `IRpcConnection.Disconnected` becomes
       `event Action<RpcDisconnectReason> Disconnected`. There is no
       `LastDisconnectReason` property.
-- [ ] `IRpcConnection.Close` becomes
+- [x] `IRpcConnection.Close` becomes
       `Close(RpcDisconnectReason reason = RpcDisconnectReason.LocalClose)`.
       The peer passes `ProtocolViolation` for a version mismatch.
-- [ ] `TcpClientConnection` and `TcpServerConnection` forward the event and
+- [x] `TcpClientConnection` and `TcpServerConnection` forward the event and
       the `Close` parameter.
-- [ ] A client-side handshake failure fires the event with `HandshakeFailed`.
+- [x] A client-side handshake failure fires the event with `HandshakeFailed`.
       `ConnectAsync` still throws.
-- [ ] Reasons are correct for peer EOF (`PeerClosed`), read failure
+- [x] Reasons are correct for peer EOF (`PeerClosed`), read failure
       (`ReadError`), write failure (`WriteError`), idle timeout, handshake
       failure, backlog limit, local close, and decoder rejection
       (`ProtocolViolation`).
-- [ ] A test proves a silent peer closes after the deadline.
-- [ ] A test proves a peer that sends one byte inside the deadline stays
+- [x] A test proves a silent peer closes after the deadline.
+- [x] A test proves a peer that sends one byte inside the deadline stays
       connected.
-- [ ] A test proves the reason for EOF, local close, idle timeout, write
+- [x] A test proves the reason for EOF, local close, idle timeout, write
       failure, and protocol violation.
-- [ ] No test sleeps. Use a short configured deadline and a deterministic
+- [x] No test sleeps. Use a short configured deadline and a deterministic
       signal.
-- [ ] The docs pass updates the TCP options tables and `rpc-api`.
-- [ ] No wire change.
+- [x] The docs pass updates the TCP options tables and `rpc-api`.
+- [x] No wire change.
 
 ## Implementation notes
 
@@ -71,3 +71,12 @@ The handshake has a deadline. The receive loop does not.
   receive path. Today both collapse to a false return.
 - A handshake failure happens before the peer exists. The connection fires
   the event with `HandshakeFailed` before `ConnectAsync` throws.
+
+## Resolution
+
+`IRpcConnection.Disconnected` carries `RpcDisconnectReason`, and `Close` takes
+the reason with a `LocalClose` default. The TCP connection distinguishes peer
+EOF, read failure, write failure, idle timeout, handshake failure, backlog
+limit, local close, and protocol violation. `TcpOptions.IdleTimeout` defaults
+to zero, which disables it. The receive wait arms the deadline only when the
+key is enabled.

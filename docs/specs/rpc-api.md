@@ -224,6 +224,12 @@ Engine rules:
   `CheckTimeouts` with a timestamp from `RpcOptions.TimestampNanos`. `Poll`
   is the convenience form: it checks deadlines with the current timestamp. A
   pull-based transport drains its queue into `HandleFrame` first.
+- `RemoteEndPoint` is the client endpoint on the server side. It is null on
+  the client side. `Close` closes the connection and fires `LocalClose`. The
+  raw connection stays internal.
+- `LogSink` receives drop and error events. A null sink keeps the TraceSource
+  default. The sink is not gated by the TraceSource switch. A sink that
+  throws is contained.
 
 ## RpcClient and RpcServer
 
