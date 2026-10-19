@@ -26,6 +26,12 @@ internal sealed class HandlerEntry<TRequest, TResponse> : HandlerEntry
         TRequest request = default;
         if (payload != null && !_requestSerializer.TryDeserialize(payload, out request))
         {
+            if (context.RequestId == 0UL)
+            {
+                RpcLog.Drop("notification payload did not decode");
+                return;
+            }
+
             peer.TryFail(context.RequestId, (int)RpcErrorCode.InvalidParams, "invalid request payload");
             return;
         }

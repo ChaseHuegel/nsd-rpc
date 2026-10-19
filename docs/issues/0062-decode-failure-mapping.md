@@ -1,7 +1,7 @@
 # Bug: Map every payload decode failure to InvalidParams
 
 - Type: bug
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem

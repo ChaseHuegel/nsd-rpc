@@ -8,7 +8,7 @@ add or work an issue.
 
 ### Bug
 
-- [ ] [Map every payload decode failure to InvalidParams](/docs/issues/0062-decode-failure-mapping.md) — a corrupt payload must not look like a handler failure.
+- [x] [Map every payload decode failure to InvalidParams](/docs/issues/0062-decode-failure-mapping.md) — a corrupt payload must not look like a handler failure.
 - [x] [Coding style says the assert helper does not exist](/docs/issues/0054-coding-style-assert-helper-text.md) — the helper ships in `Invariant.cs`.
 
 ### Improvement

@@ -65,6 +65,10 @@ The engine tests pin the protocol rules in
   out-of-order responses, timeouts against a fake clock, cancellation, faults,
   streaming, keep-alive, the malformed frame and envelope rules, the
   drop-and-log rules, the dispatch fallbacks, and the argument guards.
+- [PayloadDecodeTests.cs](../NsdRpc.Tests/PayloadDecodeTests.cs:6) pins the
+  decode boundary: a reader failure maps to `InvalidParams` for a request,
+  a drop and log for a notification, and a failed call for a chunk. The
+  connection stays open.
 - [RpcDispatcherTests.cs](../NsdRpc.Tests/RpcDispatcherTests.cs:6) pins
   dispatch errors, the app code range, directions, handler tokens, and silent
   notification failures.

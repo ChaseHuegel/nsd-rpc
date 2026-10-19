@@ -327,6 +327,9 @@ public sealed class RpcRegistry
 
 - A direction mismatch answers `MethodNotFound`.
 - A payload that does not decode answers `InvalidParams`.
+- A notification payload that does not decode is dropped and logged.
+- A chunk payload that does not decode fails the call with `InvalidRequest`.
+  The connection stays open.
 - A handler exception answers `InternalError`. The detail is logged locally
   only.
 - A handler failure outside the app range is rejected. See the code space in
@@ -348,7 +351,8 @@ public interface IPayloadSerializer<T>
 
 - The default implementation wraps the generated nsd methods. A per-type
   cache holds one serializer per payload type.
-- `TryDeserialize` returns a result. It never throws.
+- `TryDeserialize` returns a result. It never throws. Any reader failure is a
+  decode failure.
 
 ## Streaming consumption
 

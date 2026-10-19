@@ -124,6 +124,11 @@ An unknown kind value is dropped and logged.
   the envelope.
 - A payload type needs no transport registration.
 - A null payload means no data.
+- A payload that does not decode is a decode failure. The envelope stays
+  valid, so the connection stays open.
+- A request with a decode failure answers `InvalidParams`.
+- A notification with a decode failure is dropped and logged.
+- A chunk with a decode failure fails the call with `InvalidRequest`.
 - `MaxFrameBytes` bounds one frame, including the 4-byte length prefix. The
   default is 65,570, the size of the largest valid frame. A frame one byte
   above the default fails.

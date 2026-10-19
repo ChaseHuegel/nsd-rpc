@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Reflection;
 
@@ -73,6 +74,12 @@ internal sealed class NsdPayloadSerializer<T> : IPayloadSerializer<T>
         _serializeInto(in value, buffer.AsSpan(0, size), 0);
     }
 
+    // The decode boundary. A generated reader may fail with any exception on
+    // malformed input. Every failure is a decode failure, not a handler error.
+    [SuppressMessage(
+        "Design",
+        "CA1031",
+        Justification = "The payload decode boundary maps every reader failure to a decode failure.")]
     public bool TryDeserialize(ReadOnlySpan<byte> data, out T value)
     {
         try
@@ -80,7 +87,8 @@ internal sealed class NsdPayloadSerializer<T> : IPayloadSerializer<T>
             value = _deserialize(data);
             return true;
         }
-        catch (InvalidDataException)
+        catch (Exception exception) when (exception is not OutOfMemoryException
+            and not StackOverflowException)
         {
             value = default;
             return false;
