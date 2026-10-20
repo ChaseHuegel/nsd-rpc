@@ -32,7 +32,7 @@ add or work an issue.
 
 ### Bug
 
-- [ ] [A request without a dispatch hook leaks its inbound entry](/docs/issues/0064-no-hook-inbound-leak.md) — the fallback response must remove the entry.
+- [x] [A request without a dispatch hook leaks its inbound entry](/docs/issues/0064-no-hook-inbound-leak.md) — the fallback response must remove the entry.
 
 ### Improvement
 

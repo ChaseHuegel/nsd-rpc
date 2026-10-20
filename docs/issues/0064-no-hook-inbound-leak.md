@@ -1,7 +1,7 @@
 # Bug: A request without a dispatch hook leaks its inbound entry
 
 - Type: bug
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -19,6 +19,6 @@ entry leak. It did not change this path.
 
 ## Acceptance criteria
 
-- [ ] A request with no dispatch hook sends `MethodNotFound` and removes its
+- [x] A request with no dispatch hook sends `MethodNotFound` and removes its
       inbound entry.
-- [ ] A test proves the inbound table is empty after the fallback response.
+- [x] A test proves the inbound table is empty after the fallback response.

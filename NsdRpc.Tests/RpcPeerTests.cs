@@ -1681,6 +1681,7 @@ public sealed class RpcPeerTests
         Task<RpcResult<Handshake>> call = client.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(1));
         Pump(serverConn, server);
         await delivered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal(0, server.InboundCount);
         Pump(clientConn, client);
 
         RpcResult<Handshake> result = await call;

@@ -1323,8 +1323,10 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
             {
                 if (entry.Inbound != null)
                 {
-                    SendErrorResponseFrame(
-                        entry.Inbound.RequestId, (int)RpcErrorCode.MethodNotFound, "no handler registered");
+                    TryFail(
+                        entry.Inbound.RequestId,
+                        (int)RpcErrorCode.MethodNotFound,
+                        "no handler registered");
                 }
 
                 continue;
