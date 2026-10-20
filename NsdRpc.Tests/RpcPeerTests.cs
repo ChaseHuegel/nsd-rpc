@@ -354,6 +354,52 @@ public sealed class RpcPeerTests
     }
 
     [Fact]
+    public async Task CancellationBeforeDispatchRemovesTheInboundEntry()
+    {
+        (_, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var server = new RpcPeer(serverConn);
+        var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstBlocker = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var probeStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        int secondCalls = 0;
+        server.DispatchHook = (context, payload) =>
+        {
+            if (context.Method == 1)
+            {
+                firstStarted.TrySetResult();
+                return new ValueTask(firstBlocker.Task);
+            }
+
+            if (context.Method == 2)
+            {
+                secondCalls++;
+                return default;
+            }
+
+            probeStarted.TrySetResult();
+            return default;
+        };
+
+        var first = new Envelope(1, (byte)RpcMessageKind.Request, 1UL, 1UL, null, null);
+        RpcTestHelpers.Deliver(server, in first);
+        await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var second = new Envelope(1, (byte)RpcMessageKind.Request, 2UL, 2UL, null, null);
+        RpcTestHelpers.Deliver(server, in second);
+        var cancellation = new Envelope(1, (byte)RpcMessageKind.Cancellation, 2UL, 0UL, null, null);
+        RpcTestHelpers.Deliver(server, in cancellation);
+
+        firstBlocker.SetResult();
+        var probe = new Envelope(1, (byte)RpcMessageKind.Notification, 0UL, 3UL, null, null);
+        RpcTestHelpers.Deliver(server, in probe);
+        await probeStarted.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(0, secondCalls);
+        Assert.Equal(1, server.InboundCount);
+        serverConn.Disconnect();
+    }
+
+    [Fact]
     public async Task CancellationDuringHandlerDropsResponse()
     {
         (InMemoryConnection clientConn, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
@@ -378,6 +424,7 @@ public sealed class RpcPeerTests
         captured.Respond(RpcResult<Handshake>.Success(new Handshake(9)));
         Pump(clientConn, client);
 
+        Assert.Equal(0, server.InboundCount);
         Assert.DoesNotContain(
             serverConn.SentFrames,
             frame => Envelope.Deserialize((ReadOnlySpan<byte>)frame.AsSpan(4)).Kind == (byte)RpcMessageKind.Response);
@@ -429,6 +476,75 @@ public sealed class RpcPeerTests
         Task<RpcResult<Handshake>> after = client.InvokeAsync<Handshake, Handshake>(EchoMethod, new Handshake(3));
         Assert.Equal((int)RpcErrorCode.Unavailable, (await after).ErrorCode);
         Assert.False(client.Notify(EchoMethod));
+    }
+
+    [Fact]
+    public async Task FaultPendingToleratesADisposedInboundSource()
+    {
+        (_, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var server = new RpcPeer(serverConn);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var blocker = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.DispatchHook = (context, payload) =>
+        {
+            started.TrySetResult();
+            return new ValueTask(blocker.Task);
+        };
+
+        var request = new Envelope(1, (byte)RpcMessageKind.Request, 1UL, EchoMethod, null, null);
+        RpcTestHelpers.Deliver(server, in request);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Task<RpcResult<Handshake>> pending = server.InvokeAsync<Handshake, Handshake>(
+            EchoMethod, new Handshake(1));
+
+        try
+        {
+            using var source = new CancellationTokenSource();
+            Assert.True(server.AttachCancellation(1UL, source));
+            source.Dispose();
+
+            server.FaultPending((int)RpcErrorCode.Unavailable, "test");
+
+            RpcResult<Handshake> result = await pending.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal((int)RpcErrorCode.Unavailable, result.ErrorCode);
+        }
+        finally
+        {
+            blocker.SetResult();
+        }
+    }
+
+    [Fact]
+    public async Task CancellationToleratesADisposedInboundSource()
+    {
+        (_, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var server = new RpcPeer(serverConn);
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var blocker = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        server.DispatchHook = (context, payload) =>
+        {
+            started.TrySetResult();
+            return new ValueTask(blocker.Task);
+        };
+
+        var request = new Envelope(1, (byte)RpcMessageKind.Request, 1UL, EchoMethod, null, null);
+        RpcTestHelpers.Deliver(server, in request);
+        await started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        try
+        {
+            using var source = new CancellationTokenSource();
+            Assert.True(server.AttachCancellation(1UL, source));
+            source.Dispose();
+
+            var cancellation = new Envelope(1, (byte)RpcMessageKind.Cancellation, 1UL, 0UL, null, null);
+            RpcTestHelpers.Deliver(server, in cancellation);
+        }
+        finally
+        {
+            blocker.SetResult();
+        }
     }
 
     [Fact]
@@ -980,6 +1096,7 @@ public sealed class RpcPeerTests
         RpcTestHelpers.Deliver(server, in cancellation);
         captured.Fail(RpcErrorCode.PermissionDenied, "denied");
 
+        Assert.Equal(0, server.InboundCount);
         Assert.Empty(serverConn.SentFrames);
     }
 

@@ -241,6 +241,63 @@ public sealed class RpcDispatcherTests
     }
 
     [Fact]
+    public async Task CancelThenHandlerReturnThenDisconnectRaisesNoException()
+    {
+        var registry = new RpcRegistry();
+        var handler = new TokenHandler();
+        registry.Add(handler);
+        (InMemoryConnection clientConn, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var client = new RpcPeer(clientConn);
+        var server = new RpcPeer(serverConn);
+        TaskCompletionSource gate = RpcTestHelpers.AttachDispatcher(server, registry);
+
+        using var cancellation = new CancellationTokenSource();
+        Task<RpcResult<Handshake>> call = client.InvokeAsync<Handshake, Handshake>(
+            12, new Handshake(1), cancellationToken: cancellation.Token);
+        RpcTestHelpers.Pump(serverConn, server);
+        await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        cancellation.Cancel();
+        RpcTestHelpers.Pump(serverConn, server);
+        await gate.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        Assert.Equal(0, server.InboundCount);
+        serverConn.Disconnect();
+
+        RpcResult<Handshake> result = await call.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal((int)RpcErrorCode.Cancelled, result.ErrorCode);
+    }
+
+    [Fact]
+    public async Task CancellationAfterHandlerReturnIsDropped()
+    {
+        var registry = new RpcRegistry();
+        var handler = new TokenHandler();
+        registry.Add(handler);
+        (InMemoryConnection clientConn, InMemoryConnection serverConn) = InMemoryConnection.CreatePair();
+        var client = new RpcPeer(clientConn);
+        var server = new RpcPeer(serverConn);
+        TaskCompletionSource gate = RpcTestHelpers.AttachDispatcher(server, registry);
+
+        using var cancellation = new CancellationTokenSource();
+        Task<RpcResult<Handshake>> call = client.InvokeAsync<Handshake, Handshake>(
+            12, new Handshake(1), cancellationToken: cancellation.Token);
+        RpcTestHelpers.Pump(serverConn, server);
+        await handler.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        cancellation.Cancel();
+        RpcTestHelpers.Pump(serverConn, server);
+        await gate.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+        var late = new Envelope(1, (byte)RpcMessageKind.Cancellation, 1UL, 0UL, null, null);
+        RpcTestHelpers.Deliver(server, in late);
+        Assert.Equal(0, server.InboundCount);
+
+        RpcResult<Handshake> result = await call.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.Equal((int)RpcErrorCode.Cancelled, result.ErrorCode);
+    }
+
+    [Fact]
     public async Task HandlerMayRespondItselfAndDispatcherSkips()
     {
         var registry = new RpcRegistry();

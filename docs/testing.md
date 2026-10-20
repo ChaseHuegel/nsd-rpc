@@ -63,16 +63,16 @@ The engine tests pin the protocol rules in
 
 - [RpcPeerTests.cs](../NsdRpc.Tests/RpcPeerTests.cs:8) pins correlation,
   out-of-order responses, timeouts against a fake clock, cancellation, faults,
-  streaming, the `TryStream` result, the log sink, the peer close, keep-alive,
-  the malformed frame and envelope rules, the drop-and-log rules, the
-  dispatch fallbacks, and the argument guards.
+  disposed cancellation sources, streaming, the `TryStream` result, the log
+  sink, the peer close, keep-alive, the malformed frame and envelope rules, the
+  drop-and-log rules, the dispatch fallbacks, and the argument guards.
 - [PayloadDecodeTests.cs](../NsdRpc.Tests/PayloadDecodeTests.cs:9) pins the
   decode boundary: a reader failure maps to `InvalidParams` for a request,
   a drop and log for a notification, and a failed call for a chunk. The
   connection stays open.
 - [RpcDispatcherTests.cs](../NsdRpc.Tests/RpcDispatcherTests.cs:6) pins
-  dispatch errors, the app code range, directions, handler tokens, and silent
-  notification failures.
+  dispatch errors, the app code range, directions, handler tokens, canceled
+  request cleanup, and silent notification failures.
 - [RpcStreamingTests.cs](../NsdRpc.Tests/RpcStreamingTests.cs:7) pins the
   session wrapper, a waiting consumer, overflow, and every cancellation case.
 - [RpcRegistryTests.cs](../NsdRpc.Tests/RpcRegistryTests.cs:22) pins fail-fast

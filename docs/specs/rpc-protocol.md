@@ -194,8 +194,11 @@ by deadline. The send is best-effort. There is no ack.
   invalid. Drop it and log it.
 - A cancellation with an unknown id is dropped and logged.
 - A cancellation with a known id marks the request cancelled. An undispatched
-  request is never dispatched. A running handler finishes, but the peer drops
-  its response and chunks at send.
+  request is never dispatched. The dispatcher removes its entry. A running
+  handler finishes, but the peer drops its response and chunks at send. The
+  terminal response or failure removes the entry.
+- A cancellation after the terminal response or failure is dropped and
+  logged.
 - A late response at the caller has an unknown id. The caller drops it.
 - Ids are never reused on a connection. This rule makes late frames safe. A
   stale frame cannot match a new call.

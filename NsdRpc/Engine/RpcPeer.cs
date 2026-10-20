@@ -106,6 +106,19 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         }
     }
 
+    // The inbound table count. Tests use it to prove that a terminal claim
+    // removes the entry.
+    internal int InboundCount
+    {
+        get
+        {
+            lock (_inboundLock)
+            {
+                return _inbound.Count;
+            }
+        }
+    }
+
     // The number of full pending-table scans. Tests use it to prove that a
     // poll below the deadline watermark skips the scan.
     internal long TimeoutScanCount { get; private set; }
@@ -485,7 +498,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         {
             foreach (CancellationTokenSource source in sources)
             {
-                source.Cancel();
+                CancelSource(source);
             }
         }
 
@@ -498,6 +511,23 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
 
         ArrayPool<PendingCallBase>.Shared.Return(snapshot, clearArray: false);
         _dispatchSignal.Release();
+    }
+
+    private void CancelSource(CancellationTokenSource source)
+    {
+        try
+        {
+            source.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The dispatcher disposes the source after the handler returns. A
+            // fault or a late cancellation can race that disposal.
+            if (RpcLog.IsEnabled(_options.LogSink))
+            {
+                RpcLog.Drop(_options.LogSink, "cancellation source already disposed");
+            }
+        }
     }
 
     internal void RespondAsserting<TResponse>(ulong requestId, in RpcResult<TResponse> result)
@@ -633,6 +663,11 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
 
             if (_inbound.TryGetValue(requestId, out InboundCall? inbound))
             {
+                if (inbound.Cancelled)
+                {
+                    return false;
+                }
+
                 inbound.CancelSource = cancelSource;
                 return true;
             }
@@ -1179,22 +1214,27 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         }
 
         CancellationTokenSource? cancelSource = null;
+        bool known = false;
         lock (_inboundLock)
         {
             if (_inbound.TryGetValue(envelope.Id, out InboundCall? inbound))
             {
+                known = true;
                 inbound.Cancelled = true;
                 cancelSource = inbound.CancelSource;
             }
         }
 
-        if (cancelSource == null)
+        if (!known)
         {
             RpcLog.Drop(_options.LogSink, "cancellation with unknown id");
             return;
         }
 
-        cancelSource.Cancel();
+        if (cancelSource != null)
+        {
+            CancelSource(cancelSource);
+        }
     }
 
     private long ResetDeadline(long timeoutNanos, long nowNanos)
@@ -1251,6 +1291,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         while (true)
         {
             DispatchEntry entry;
+            bool cancelled = false;
             lock (_inboundLock)
             {
                 if (_dispatchQueue.Count == 0)
@@ -1259,6 +1300,11 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
                 }
 
                 entry = _dispatchQueue.Dequeue();
+                if (entry.Inbound != null && entry.Inbound.Cancelled)
+                {
+                    _inbound.Remove(entry.Inbound.RequestId);
+                    cancelled = true;
+                }
             }
 
             if (_faulted)
@@ -1266,7 +1312,7 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
                 return;
             }
 
-            if (entry.Inbound != null && entry.Inbound.Cancelled)
+            if (cancelled)
             {
                 RpcLog.Drop(_options.LogSink, "cancelled before dispatch");
                 continue;
@@ -1339,12 +1385,12 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
                 return InboundClaim.Absent;
             }
 
+            _inbound.Remove(requestId);
             if (inbound.Cancelled)
             {
                 return InboundClaim.Cancelled;
             }
 
-            _inbound.Remove(requestId);
             return InboundClaim.Claimed;
         }
     }
