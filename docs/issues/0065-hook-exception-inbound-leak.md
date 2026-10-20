@@ -1,7 +1,7 @@
 # Bug: A dispatch hook exception leaks its inbound entry
 
 - Type: bug
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -18,6 +18,6 @@ hook is installed. It did not change the hook exception path.
 
 ## Acceptance criteria
 
-- [ ] A dispatch hook exception sends `InternalError` and removes its inbound
+- [x] A dispatch hook exception sends `InternalError` and removes its inbound
       entry.
-- [ ] A test proves the inbound table is empty after the error response.
+- [x] A test proves the inbound table is empty after the error response.

@@ -1346,7 +1346,10 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
                 RpcLog.Error(_options.LogSink, "dispatch hook failed", exception);
                 if (entry.Inbound != null)
                 {
-                    SendErrorResponseFrame(entry.Inbound.RequestId, (int)RpcErrorCode.InternalError, "internal error");
+                    TryFail(
+                        entry.Inbound.RequestId,
+                        (int)RpcErrorCode.InternalError,
+                        "internal error");
                 }
             }
         }
