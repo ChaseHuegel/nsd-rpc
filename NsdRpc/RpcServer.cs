@@ -132,10 +132,12 @@ public sealed class RpcServer : IRpcHost
             }
 
             Invariant.That(connection.ClientId != 0UL, "The server transport assigned client id zero.");
-            var peer = new RpcPeer(connection, _options);
-            peer.DispatchHook = new RpcDispatcher(_registry, peer).DispatchAsync;
-            peer.Host = this;
             ulong clientId = connection.ClientId;
+            var peer = new RpcPeer(
+                connection,
+                _options,
+                this,
+                created => new RpcDispatcher(_registry, created).DispatchAsync);
             lock (_gate)
             {
                 Invariant.That(
@@ -147,6 +149,10 @@ public sealed class RpcServer : IRpcHost
 
             connection.Disconnected += _ => RemovePeer(clientId);
             ClientConnected?.Invoke(peer);
+            if (!connection.IsConnected)
+            {
+                RemovePeer(clientId);
+            }
         }
     }
 

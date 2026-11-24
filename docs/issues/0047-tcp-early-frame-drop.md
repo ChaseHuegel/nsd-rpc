@@ -1,7 +1,7 @@
 # Bug: The server transport drops a frame that arrives before the peer subscribes
 
 - Type: bug
-- Status: open
+- Status: done
 - Workflow: ../specs/issues.md
 
 ## Problem
@@ -27,7 +27,7 @@ it.
 ## Acceptance criteria
 
 - [x] The receive loop starts only after the consumer can subscribe, or the connection buffers frames until a handler exists.
-- [ ] A test writes the handshake and a request in one send. The request dispatches and the call completes.
-- [ ] A late subscriber still receives every buffered frame in order.
-- [ ] A frame that arrives with no subscriber and no buffer rule never drops silently.
-- [ ] Existing TCP integration tests pass unchanged.
+- [x] A test writes the handshake and a request in one send. The request dispatches and the call completes.
+- [x] A late subscriber still receives every buffered frame in order.
+- [x] A frame that arrives with no subscriber and no buffer rule never drops silently.
+- [x] Existing TCP integration tests pass unchanged.

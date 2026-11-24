@@ -173,7 +173,7 @@ public sealed class TcpServerTransport : IRpcServerTransport
         {
             _ready.Enqueue(connection);
         }
-        
+
         connection.StartReceiving();
         _readySignal.Release();
     }

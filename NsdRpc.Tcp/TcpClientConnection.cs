@@ -11,6 +11,7 @@ public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink, IR
 {
     private readonly RpcOptions _rpcOptions;
     private readonly TcpOptions _tcpOptions;
+    private readonly object _eventLock = new();
     private TcpConnection? _connection;
     private Action<RpcDisconnectReason>? _disconnectedHandlers;
     private RpcFrameHandler? _frameReceivedHandlers;
@@ -50,8 +51,46 @@ public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink, IR
 
     public event RpcFrameHandler FrameReceived
     {
-        add => _frameReceivedHandlers += value;
-        remove => _frameReceivedHandlers -= value;
+        add
+        {
+            if (value == null)
+            {
+                return;
+            }
+
+            TcpConnection? connection;
+            lock (_eventLock)
+            {
+                connection = _connection;
+                if (connection == null)
+                {
+                    _frameReceivedHandlers += value;
+                    return;
+                }
+            }
+
+            connection.FrameReceived += value;
+        }
+        remove
+        {
+            if (value == null)
+            {
+                return;
+            }
+
+            TcpConnection? connection;
+            lock (_eventLock)
+            {
+                connection = _connection;
+                if (connection == null)
+                {
+                    _frameReceivedHandlers -= value;
+                    return;
+                }
+            }
+
+            connection.FrameReceived -= value;
+        }
     }
 
     public bool TrySend(ReadOnlySpan<byte> frame)
@@ -80,7 +119,6 @@ public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink, IR
 
         var connection = new TcpConnection(socket, _rpcOptions, _tcpOptions);
         connection.Disconnected += ForwardDisconnected;
-        connection.FrameReceived += ForwardFrame;
         try
         {
             await connection.RunHandshakeAsync().ConfigureAwait(false);
@@ -91,7 +129,17 @@ public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink, IR
             throw;
         }
 
-        _connection = connection;
+        lock (_eventLock)
+        {
+            if (_frameReceivedHandlers != null)
+            {
+                connection.FrameReceived += _frameReceivedHandlers;
+                _frameReceivedHandlers = null;
+            }
+
+            _connection = connection;
+        }
+
         connection.StartReceiving();
     }
 
@@ -135,10 +183,5 @@ public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink, IR
     private void ForwardDisconnected(RpcDisconnectReason reason)
     {
         _disconnectedHandlers?.Invoke(reason);
-    }
-
-    private void ForwardFrame(ReadOnlySpan<byte> frame)
-    {
-        _frameReceivedHandlers?.Invoke(frame);
     }
 }

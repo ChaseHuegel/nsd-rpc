@@ -19,6 +19,7 @@ public sealed class TcpOptionsTests
         Assert.Equal(TimeSpan.FromSeconds(10), options.HandshakeTimeout);
         Assert.Equal(TimeSpan.Zero, options.IdleTimeout);
         Assert.Equal(65536, options.ReceiveBufferBytes);
+        Assert.Equal(1048576, options.ReceiveQueueBytes);
         Assert.Equal(TimeSpan.FromSeconds(30), options.DecoderIdleShrinkAfter);
         Assert.Equal(1048576, options.SendQueueBytes);
         Assert.Equal(TimeSpan.Zero, options.SendBatchInterval);
@@ -61,5 +62,17 @@ public sealed class TcpOptionsTests
 
         Assert.Throws<ArgumentException>(
             () => new TcpServerTransport(new RpcOptions(), tcpOptions));
+    }
+
+    [Fact]
+    public void NonPositiveReceiveQueueBytesFailsFast()
+    {
+        var zero = new TcpOptions { ReceiveQueueBytes = 0 };
+        var negative = new TcpOptions { ReceiveQueueBytes = -1 };
+
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new TcpServerTransport(new RpcOptions(), zero));
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new TcpClientConnection(new RpcOptions(), negative));
     }
 }

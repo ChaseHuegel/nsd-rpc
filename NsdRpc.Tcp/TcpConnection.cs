@@ -19,6 +19,7 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink, IRpcConne
     private readonly TcpOptions _tcpOptions;
     private readonly ArrayPool<byte> _receiveBufferPool;
     private readonly RpcFrameHandler _onFrame;
+    private readonly object _frameLock = new();
     private readonly object _sendLock = new();
     private readonly Queue<SendBuffer> _sendQueue = new();
     private readonly CancellationTokenSource _lifetime = new();
@@ -28,6 +29,9 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink, IRpcConne
     private readonly SendBacklogTracker _backlog;
     private Action<RpcDisconnectReason>? _disconnectedHandlers;
     private RpcFrameHandler? _frameReceivedHandlers;
+    private Queue<byte[]>? _bufferedFrames;
+    private int _bufferedBytes;
+    private bool _delivering;
     private int _queuedBytes;
     private int _peakQueuedBytes;
     private long _packetsSent;
@@ -96,8 +100,44 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink, IRpcConne
 
     public event RpcFrameHandler FrameReceived
     {
-        add => _frameReceivedHandlers += value;
-        remove => _frameReceivedHandlers -= value;
+        add
+        {
+            if (value == null)
+            {
+                return;
+            }
+
+            bool shouldDrain = false;
+            lock (_frameLock)
+            {
+                _frameReceivedHandlers += value;
+                if (_disconnected == 0
+                    && !_delivering
+                    && _bufferedFrames != null
+                    && _bufferedFrames.Count > 0)
+                {
+                    _delivering = true;
+                    shouldDrain = true;
+                }
+            }
+
+            if (shouldDrain)
+            {
+                DrainBufferedFrames();
+            }
+        }
+        remove
+        {
+            if (value == null)
+            {
+                return;
+            }
+
+            lock (_frameLock)
+            {
+                _frameReceivedHandlers -= value;
+            }
+        }
     }
 
     public bool TrySend(ReadOnlySpan<byte> frame)
@@ -570,6 +610,11 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink, IRpcConne
                 return false;
             }
 
+            if (_disconnected != 0)
+            {
+                return false;
+            }
+
             EnsureIdleSweep();
             return true;
         }
@@ -761,9 +806,136 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink, IRpcConne
 
     private void OnFrame(ReadOnlySpan<byte> frame)
     {
-        Interlocked.Increment(ref _packetsReceived);
-        Interlocked.Add(ref _bytesReceived, frame.Length);
-        _frameReceivedHandlers?.Invoke(frame);
+        if (Volatile.Read(ref _disconnected) != 0)
+        {
+            return;
+        }
+
+        RpcFrameHandler? handlers = null;
+        bool drainBuffered = false;
+        bool overflow = false;
+        lock (_frameLock)
+        {
+            if (_disconnected != 0)
+            {
+                return;
+            }
+
+            if (_frameReceivedHandlers == null || _delivering)
+            {
+                overflow = !TryBufferFrameLocked(frame);
+            }
+            else if (_bufferedFrames != null && _bufferedFrames.Count > 0)
+            {
+                overflow = !TryBufferFrameLocked(frame);
+                if (!overflow)
+                {
+                    _delivering = true;
+                    drainBuffered = true;
+                }
+            }
+            else
+            {
+                handlers = _frameReceivedHandlers;
+                _delivering = true;
+            }
+
+            if (!overflow)
+            {
+                Interlocked.Increment(ref _packetsReceived);
+                Interlocked.Add(ref _bytesReceived, frame.Length);
+            }
+        }
+
+        if (overflow)
+        {
+            FireDisconnected(RpcDisconnectReason.BacklogLimit);
+            return;
+        }
+
+        if (drainBuffered)
+        {
+            DrainBufferedFrames();
+            return;
+        }
+
+        if (handlers != null)
+        {
+            DeliverDirectFrame(handlers, frame);
+        }
+    }
+
+    private void DeliverDirectFrame(RpcFrameHandler handlers, ReadOnlySpan<byte> frame)
+    {
+        try
+        {
+            handlers.Invoke(frame);
+        }
+        catch (Exception)
+        {
+            lock (_frameLock)
+            {
+                _delivering = false;
+            }
+
+            throw;
+        }
+
+        DrainBufferedFrames();
+    }
+
+    private bool TryBufferFrameLocked(ReadOnlySpan<byte> frame)
+    {
+        if (frame.Length > _tcpOptions.ReceiveQueueBytes - _bufferedBytes)
+        {
+            return false;
+        }
+
+        _bufferedFrames ??= new Queue<byte[]>();
+        _bufferedFrames.Enqueue(frame.ToArray());
+        _bufferedBytes += frame.Length;
+        return true;
+    }
+
+    private void DrainBufferedFrames()
+    {
+        bool released = false;
+        try
+        {
+            while (true)
+            {
+                byte[] next;
+                RpcFrameHandler? handlers;
+                lock (_frameLock)
+                {
+                    if (_disconnected != 0
+                        || _bufferedFrames == null
+                        || _bufferedFrames.Count == 0
+                        || _frameReceivedHandlers == null)
+                    {
+                        _delivering = false;
+                        released = true;
+                        return;
+                    }
+
+                    next = _bufferedFrames.Dequeue();
+                    _bufferedBytes -= next.Length;
+                    handlers = _frameReceivedHandlers;
+                }
+
+                handlers.Invoke(next);
+            }
+        }
+        finally
+        {
+            if (!released)
+            {
+                lock (_frameLock)
+                {
+                    _delivering = false;
+                }
+            }
+        }
     }
 
     private void FireDisconnected(RpcDisconnectReason reason)
@@ -771,6 +943,12 @@ internal sealed class TcpConnection : IRpcConnection, IOwnedFrameSink, IRpcConne
         if (Interlocked.Exchange(ref _disconnected, 1) != 0)
         {
             return;
+        }
+
+        lock (_frameLock)
+        {
+            _bufferedFrames?.Clear();
+            _bufferedBytes = 0;
         }
 
         _lifetime.Cancel();
