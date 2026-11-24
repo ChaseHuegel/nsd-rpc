@@ -62,6 +62,67 @@ public sealed class RpcServiceGeneratorTests
     }
 
     [Fact]
+    public void GeneratesBoolNotificationProxy()
+    {
+        const string source = """
+            using NsdRpc;
+            using NsdRpc.Wire;
+
+            [RpcService]
+            public interface IChat
+            {
+                [RpcMethod(102)]
+                bool NotifyChat(Handshake message);
+
+                [RpcMethod(103)]
+                bool Ping();
+            }
+            """;
+
+        (_, GeneratorDriverRunResult result, ImmutableArray<Diagnostic> diagnostics) = GeneratorRunner.Run(source);
+
+        Assert.Empty(diagnostics);
+        string text = GeneratedSource(result, "ChatClient.g.cs");
+        Assert.Contains("public bool NotifyChat(global::NsdRpc.Wire.Handshake message)", text);
+        Assert.Contains(
+            "return _caller.Notify<global::NsdRpc.Wire.Handshake>(102UL, message);",
+            text);
+        Assert.Contains("public bool Ping()", text);
+        Assert.Contains("return _caller.Notify(103UL);", text);
+    }
+
+    [Fact]
+    public void GeneratesBoolNotificationProxyWithVoidHandlerPair()
+    {
+        const string source = """
+            using System.Threading;
+            using NsdRpc;
+            using NsdRpc.Wire;
+
+            [RpcService]
+            public interface IChat
+            {
+                [RpcMethod(101)]
+                bool NotifyChat(Handshake message);
+
+                [RpcMethod(101)]
+                void OnNotifyChat(Handshake message, RpcContext context, CancellationToken cancellationToken);
+            }
+            """;
+
+        (_, GeneratorDriverRunResult result, ImmutableArray<Diagnostic> diagnostics) = GeneratorRunner.Run(source);
+
+        Assert.Empty(diagnostics);
+        string client = GeneratedSource(result, "ChatClient.g.cs");
+        string handler = GeneratedSource(result, "ChatHandler.g.cs");
+        Assert.Contains("public bool NotifyChat(global::NsdRpc.Wire.Handshake message)", client);
+        Assert.Contains(
+            "return _caller.Notify<global::NsdRpc.Wire.Handshake>(101UL, message);",
+            client);
+        Assert.Contains("public virtual void OnNotifyChat(", handler);
+    }
+
+    [Fact]
     public void GeneratesHandlerBase()
     {
         const string source = """
@@ -237,6 +298,17 @@ public sealed class RpcServiceGeneratorTests
             ValueTask<RpcResult<Handshake>> StreamAsync(Handshake request, RpcContext context, CancellationToken cancellationToken);
         }
         """)]
+    [InlineData("RSG1012", """
+        using System.Threading;
+        using NsdRpc;
+        using NsdRpc.Wire;
+        [RpcService]
+        public interface IChat
+        {
+            [RpcMethod(100)]
+            bool OnNotifyChat(Handshake message, RpcContext context, CancellationToken cancellationToken);
+        }
+        """)]
     public void ReportsDiagnostic(string id, string source)
     {
         (_, _, ImmutableArray<Diagnostic> diagnostics) = GeneratorRunner.Run(source);
@@ -316,6 +388,82 @@ public sealed class RpcServiceGeneratorTests
 
         Assert.Empty(diagnostics);
         Assert.Equal(5, RunDriver(compilation));
+    }
+
+    [Fact]
+    public void GeneratedBoolNotificationProxyReportsTheSendResult()
+    {
+        const string source = """
+            using System;
+            using NsdRpc;
+            using NsdRpc.Wire;
+
+            [RpcService]
+            public interface IChat
+            {
+                [RpcMethod(102)]
+                bool NotifyChat(Handshake message);
+            }
+
+            public static class Driver
+            {
+                public static int Run()
+                {
+                    var connection = new FakeConnection();
+                    var peer = new RpcPeer(connection);
+                    var chat = new ChatClient(peer);
+
+                    if (!chat.NotifyChat(new Handshake(7)))
+                    {
+                        throw new Exception("an accepted send must return true");
+                    }
+
+                    peer.Close();
+                    if (chat.NotifyChat(new Handshake(8)))
+                    {
+                        throw new Exception("a closed peer must return false");
+                    }
+
+                    return 8;
+                }
+            }
+
+            public sealed class FakeConnection : IRpcConnection
+            {
+                private Action<RpcDisconnectReason>? _disconnected;
+
+                public bool IsConnected { get; private set; } = true;
+
+                public void Close(RpcDisconnectReason reason = RpcDisconnectReason.LocalClose)
+                {
+                    if (!IsConnected)
+                    {
+                        return;
+                    }
+
+                    IsConnected = false;
+                    _disconnected?.Invoke(reason);
+                }
+
+                public event Action<RpcDisconnectReason> Disconnected
+                {
+                    add => _disconnected += value;
+                    remove => _disconnected -= value;
+                }
+
+                public event RpcFrameHandler FrameReceived { add { } remove { } }
+
+                public bool TrySend(ReadOnlySpan<byte> frame)
+                {
+                    return IsConnected;
+                }
+            }
+            """;
+
+        (Compilation compilation, _, ImmutableArray<Diagnostic> diagnostics) = GeneratorRunner.Run(source);
+
+        Assert.Empty(diagnostics);
+        Assert.Equal(8, RunDriver(compilation));
     }
 
     [Fact]

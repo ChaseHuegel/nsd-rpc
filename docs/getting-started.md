@@ -199,9 +199,11 @@ Check `result.IsSuccess` before you read `result.Value`. Cast
 
 ## Other call kinds
 
-A notification sends a message with no response. A `void` invocation shape
-generates a client method with the same name. A `void` handler shape generates
-a virtual member on the handler base. An unhandled notification does nothing.
+A notification sends a message with no response. A `void` or `bool` invocation
+shape generates a client method with the same name. A `bool` method returns
+`true` when the peer accepts the frame and `false` when it rejects the frame. A
+`void` handler shape generates a virtual member on the handler base. An
+unhandled notification does nothing.
 
 For a notification method named `NotifyHello`:
 

@@ -15,3 +15,4 @@ RSG1007 | NsdRpc.Generators | Error | Response and chunk types must be structs
 RSG1008 | NsdRpc.Generators | Error | Duplicate method id
 RSG1010 | NsdRpc.Generators | Error | Duplicate handler request type
 RSG1011 | NsdRpc.Generators | Error | Stream chunk type mismatch
+RSG1012 | NsdRpc.Generators | Error | Notification handler must return void

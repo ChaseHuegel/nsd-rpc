@@ -49,7 +49,8 @@ internal static class Diagnostics
     public static readonly DiagnosticDescriptor UnsupportedReturnType = new(
         id: "RSG1006",
         title: "Unsupported service method return type",
-        messageFormat: "Service method '{0}' must return Task<RpcResult<T>> or RpcStreamSession<TChunk, T>",
+        messageFormat: "Service method '{0}' must return Task<RpcResult<T>>, RpcStreamSession<TChunk, T>, "
+            + "or a notification (void or bool)",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -82,6 +83,15 @@ internal static class Diagnostics
         id: "RSG1011",
         title: "Stream chunk type mismatch",
         messageFormat: "The stream chunk type of '{0}' does not match the server's Streams declaration",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor NotificationHandlerMustBeVoid = new(
+        id: "RSG1012",
+        title: "Notification handler must return void",
+        messageFormat: "Notification handler '{0}' must return void "
+            + "because a handler has no frame to reject",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
