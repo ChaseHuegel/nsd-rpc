@@ -11,16 +11,26 @@ public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink, IR
 {
     private readonly RpcOptions _rpcOptions;
     private readonly TcpOptions _tcpOptions;
+    private readonly Func<Socket, Task> _connectEndpoint;
     private readonly object _eventLock = new();
     private TcpConnection? _connection;
     private Action<RpcDisconnectReason>? _disconnectedHandlers;
     private RpcFrameHandler? _frameReceivedHandlers;
 
     public TcpClientConnection(RpcOptions rpcOptions, TcpOptions tcpOptions)
+        : this(rpcOptions, tcpOptions, null)
+    {
+    }
+
+    // A test seam. The connector lets a test hold the connect open without a
+    // routed address. A null connector connects the socket to the options.
+    internal TcpClientConnection(
+        RpcOptions rpcOptions, TcpOptions tcpOptions, Func<Socket, Task>? connectEndpoint)
     {
         _rpcOptions = rpcOptions ?? throw new ArgumentNullException(nameof(rpcOptions));
         _tcpOptions = tcpOptions ?? throw new ArgumentNullException(nameof(tcpOptions));
         TcpOptionValidation.Validate(_tcpOptions);
+        _connectEndpoint = connectEndpoint ?? ConnectEndpoint;
     }
 
     public bool IsConnected => _connection?.IsConnected ?? false;
@@ -143,16 +153,21 @@ public sealed class TcpClientConnection : IClientConnection, IOwnedFrameSink, IR
         connection.StartReceiving();
     }
 
+    private Task ConnectEndpoint(Socket socket)
+    {
+        return socket.ConnectAsync(_tcpOptions.Host, _tcpOptions.Port);
+    }
+
     private async Task ConnectSocketAsync(Socket socket)
     {
         if (_tcpOptions.ConnectTimeout <= TimeSpan.Zero)
         {
-            await socket.ConnectAsync(_tcpOptions.Host, _tcpOptions.Port).ConfigureAwait(false);
+            await _connectEndpoint(socket).ConfigureAwait(false);
             return;
         }
 
         using var timeout = new CancellationTokenSource();
-        Task connect = socket.ConnectAsync(_tcpOptions.Host, _tcpOptions.Port);
+        Task connect = _connectEndpoint(socket);
         Task delay = Task.Delay(ClampTimeout(_tcpOptions.ConnectTimeout), timeout.Token);
         Task completed = await Task.WhenAny(connect, delay).ConfigureAwait(false);
         timeout.Cancel();

@@ -894,21 +894,27 @@ public sealed class TcpIntegrationTests
     }
 
     [Fact]
-    public async Task ConnectTimeoutBoundsABlackholedRoute()
+    public async Task ConnectTimeoutBoundsAConnectThatNeverCompletes()
     {
+        var connect = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var connection = new TcpClientConnection(
             new RpcOptions(),
             new TcpOptions
             {
-                Host = "192.0.2.1",
-                Port = 9,
+                Host = "127.0.0.1",
+                Port = 1,
                 ConnectTimeout = TimeSpan.FromMilliseconds(200),
-            });
+            },
+            _ => connect.Task);
         var elapsed = Stopwatch.StartNew();
 
-        await Assert.ThrowsAsync<TimeoutException>(() => connection.ConnectAsync());
+        Task connecting = connection.ConnectAsync();
+        Task finished = await Task.WhenAny(connecting, Task.Delay(TimeSpan.FromSeconds(5)));
 
+        Assert.Same(connecting, finished);
+        await Assert.ThrowsAsync<TimeoutException>(() => connecting);
         elapsed.Stop();
+        connect.TrySetResult();
         Assert.True(elapsed.Elapsed < TimeSpan.FromSeconds(5));
         Assert.False(connection.IsConnected);
     }
