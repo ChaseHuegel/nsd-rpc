@@ -87,14 +87,14 @@ The transport tests pin the TCP layer:
 - [TcpFrameDecoderTests.cs](../NsdRpc.Tests/TcpFrameDecoderTests.cs:6) pins
   the framing contract, buffer growth, the cap, the idle shrink, and fuzzing.
 - [TcpIntegrationTests.cs](../NsdRpc.Tests/TcpIntegrationTests.cs:13) pins
-  the handshake and round trips over loopback sockets, the bad-handshake skip, the
-  handshake framing errors, the connect timeout, the bind address, the
-  send-queue bound, the send backlog policy, the send batching policy,
-  the disconnect paths and their reasons, the idle timeout and its reset on a read, the per-read
-  receive buffer rent and return, the idle connection holding no receive
-  buffer, the remote endpoint, the decoder idle shrink gate and no-thrash
-  rule, and early-frame buffering before `FrameReceived` subscription and its
-  queue overflow close.
+  the handshake and round trips over loopback sockets, the bad-handshake
+  skip, the handshake framing errors, the connect timeout for a connect that
+  never completes, the bind address, the send-queue bound, the send backlog
+  policy, the send batching policy, the disconnect paths and their reasons,
+  the idle timeout and its reset on a read, the per-read receive buffer rent
+  and return, the idle connection holding no receive buffer, the remote
+  endpoint, the decoder idle shrink gate and no-thrash rule, and early-frame
+  buffering before `FrameReceived` subscription and its queue overflow close.
 - [ConnectionStatsTests.cs](../NsdRpc.Tests/ConnectionStatsTests.cs:9) pins the
   exact counters for a known exchange, the queue depth and peak under a
   stalled read, the concurrent rejected-send count, and the peer default
