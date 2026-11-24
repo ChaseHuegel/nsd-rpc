@@ -10,6 +10,12 @@ internal static class TcpOptionValidation
             throw new ArgumentNullException(nameof(options), "TcpOptions.BindAddress must not be null.");
         }
 
+        if (options.ReceiveQueueBytes < 1)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options), "ReceiveQueueBytes must be positive.");
+        }
+
         if (options.SendBacklogDisconnectBytes < 0)
         {
             throw new ArgumentOutOfRangeException(

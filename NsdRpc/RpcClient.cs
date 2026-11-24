@@ -20,9 +20,11 @@ public sealed class RpcClient : IRpcHost, IRpcCaller
             throw new ArgumentNullException(nameof(registry));
         }
 
-        _peer = new RpcPeer(connection, options);
-        _peer.Host = this;
-        _peer.DispatchHook = new RpcDispatcher(registry, _peer).DispatchAsync;
+        _peer = new RpcPeer(
+            connection,
+            options,
+            this,
+            created => new RpcDispatcher(registry, created).DispatchAsync);
     }
 
     public PeerSet Peers => _peer.Peers;

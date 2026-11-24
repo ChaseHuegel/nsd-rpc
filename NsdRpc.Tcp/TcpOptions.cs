@@ -31,6 +31,9 @@ public sealed class TcpOptions
     /// <summary>The receive buffer size per read. The receive loop rents it per read.</summary>
     public int ReceiveBufferBytes { get; set; } = 65536;
 
+    /// <summary>The largest buffered receive bytes before a subscriber attaches.</summary>
+    public int ReceiveQueueBytes { get; set; } = 1048576;
+
     /// <summary>The decoder shrinks to its start size after this idle period. Zero or negative disables it.</summary>
     public TimeSpan DecoderIdleShrinkAfter { get; set; } = TimeSpan.FromSeconds(30);
 

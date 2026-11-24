@@ -47,6 +47,15 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
     private IRpcHost _host;
 
     public RpcPeer(IRpcConnection connection, RpcOptions? options = null)
+        : this(connection, options, host: null, dispatchHookFactory: null)
+    {
+    }
+
+    internal RpcPeer(
+        IRpcConnection connection,
+        RpcOptions? options,
+        IRpcHost? host,
+        Func<RpcPeer, RpcDispatchHook>? dispatchHookFactory)
     {
         _connection = connection ?? throw new ArgumentNullException(nameof(connection));
         _options = options ?? RpcOptions.Default;
@@ -56,7 +65,8 @@ public sealed class RpcPeer : IRpcHost, IRpcCaller
         _clientId = (connection as IServerConnection)?.ClientId ?? 0UL;
         _selfPeers = [this];
         _onCallCancelled = OnCallCancelled;
-        _host = this;
+        _host = host ?? this;
+        _dispatchHook = dispatchHookFactory?.Invoke(this);
         _connection.Disconnected += OnDisconnected;
         _connection.FrameReceived += HandleFrame;
     }

@@ -1284,6 +1284,196 @@ public sealed class TcpIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task HandshakeAndRequestInOneSendCompletesTheCall()
+    {
+        var registry = new RpcRegistry();
+        registry.Add(new EchoHandler());
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        var server = new RpcServer(transport, registry);
+        server.Start();
+        try
+        {
+            using var socket = new Socket(
+                AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            await socket.ConnectAsync(IPAddress.Loopback, transport.Port);
+            await ReadFrameAsync(socket).WaitAsync(TimeSpan.FromSeconds(10));
+
+            byte[] handshakeFrame = Frame(new Handshake(1).Serialize());
+            var request = new Envelope(
+                1,
+                (byte)RpcMessageKind.Request,
+                1UL,
+                300UL,
+                new Handshake(41).Serialize(),
+                null);
+            byte[] requestFrame = Frame(request.Serialize());
+            byte[] combined = new byte[handshakeFrame.Length + requestFrame.Length];
+            handshakeFrame.CopyTo(combined, 0);
+            requestFrame.CopyTo(combined, handshakeFrame.Length);
+
+            // Send the handshake and the first request together without waiting
+            // for ClientConnected.
+            await socket.SendAsync(combined, SocketFlags.None);
+
+            byte[] responseBytes = await ReadFrameAsync(socket).WaitAsync(TimeSpan.FromSeconds(10));
+            Envelope response = Envelope.Deserialize((ReadOnlySpan<byte>)responseBytes);
+            Assert.Equal((byte)RpcMessageKind.Response, response.Kind);
+            Assert.Equal(1UL, response.Id);
+            Assert.Null(response.Error);
+            Assert.NotNull(response.Payload);
+            Handshake value = Handshake.Deserialize((ReadOnlySpan<byte>)response.Payload);
+            Assert.Equal(42, value.ProtocolVersion);
+        }
+        finally
+        {
+            server.Close();
+        }
+    }
+
+    [Fact]
+    public async Task HandshakeAndVersionMismatchInOneSendClosesTheServerConnection()
+    {
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        var server = new RpcServer(transport, new RpcRegistry());
+        var disconnected = new TaskCompletionSource(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        server.ClientDisconnected += _ => disconnected.TrySetResult();
+        server.Start();
+        try
+        {
+            using var socket = new Socket(
+                AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            await socket.ConnectAsync(IPAddress.Loopback, transport.Port);
+            await ReadFrameAsync(socket).WaitAsync(TimeSpan.FromSeconds(10));
+
+            byte[] handshakeFrame = Frame(new Handshake(1).Serialize());
+            var badVersion = new Envelope(
+                2, (byte)RpcMessageKind.Notification, 0UL, 1UL, null, null);
+            byte[] badFrame = Frame(badVersion.Serialize());
+            byte[] combined = new byte[handshakeFrame.Length + badFrame.Length];
+            handshakeFrame.CopyTo(combined, 0);
+            badFrame.CopyTo(combined, handshakeFrame.Length);
+
+            await socket.SendAsync(combined, SocketFlags.None);
+
+            byte[] buffer = new byte[1];
+            int read = await socket
+                .ReceiveAsync(buffer, SocketFlags.None)
+                .WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Equal(0, read);
+            await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.Empty(server.Peers);
+        }
+        finally
+        {
+            server.Close();
+        }
+    }
+
+    [Fact]
+    public async Task LateSubscriberReceivesBufferedFramesInOrder()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var connection = new TcpConnection(client, new RpcOptions(), new TcpOptions());
+            byte[] first = Frame(1, 2, 3);
+            byte[] second = Frame(4, 5);
+            byte[] third = Frame(6, 7, 8, 9);
+            byte[] combined = new byte[first.Length + second.Length + third.Length];
+            first.CopyTo(combined, 0);
+            second.CopyTo(combined, first.Length);
+            third.CopyTo(combined, first.Length + second.Length);
+
+            await server.SendAsync(combined, SocketFlags.None);
+            Assert.True(await connection.ReceiveOnceAsync().WaitAsync(TimeSpan.FromSeconds(10)));
+            Assert.Equal(3, connection.Stats.PacketsReceived);
+
+            List<byte[]> received = [];
+            connection.FrameReceived += frame => received.Add(frame.ToArray());
+
+            Assert.Equal(3, received.Count);
+            Assert.Equal(first, received[0]);
+            Assert.Equal(second, received[1]);
+            Assert.Equal(third, received[2]);
+            connection.Close();
+        }
+    }
+
+    [Fact]
+    public async Task ClientLateSubscriberReceivesBufferedFramesInOrder()
+    {
+        var transport = new TcpServerTransport(new RpcOptions(), new TcpOptions());
+        try
+        {
+            Task<IServerConnection?> accept = transport.AcceptAsync();
+            var client = new TcpClientConnection(
+                new RpcOptions(), new TcpOptions { Host = "127.0.0.1", Port = transport.Port });
+            await client.ConnectAsync();
+            IServerConnection serverSide = (await accept)!;
+
+            byte[] first = Frame(10, 20);
+            byte[] second = Frame(30, 40, 50);
+            Assert.True(serverSide.TrySend(first));
+            Assert.True(serverSide.TrySend(second));
+
+            // Wait until both frames arrive at the client before subscribing,
+            // proving the connection buffered them until a subscriber attached.
+            var deadline = Stopwatch.StartNew();
+            while (client.Stats.PacketsReceived < 2)
+            {
+                Assert.True(deadline.Elapsed < TimeSpan.FromSeconds(10));
+                await Task.Yield();
+            }
+
+            List<byte[]> received = [];
+            client.FrameReceived += frame => received.Add(frame.ToArray());
+
+            Assert.Equal(2, received.Count);
+            Assert.Equal(first, received[0]);
+            Assert.Equal(second, received[1]);
+            client.Close();
+        }
+        finally
+        {
+            transport.Close();
+        }
+    }
+
+    [Fact]
+    public async Task ReceiveBufferOverflowWithNoSubscriberClosesWithBacklogLimit()
+    {
+        (Socket client, Socket server) = await ConnectPairAsync();
+        using (client)
+        using (server)
+        {
+            var connection = new TcpConnection(
+                client, new RpcOptions(), new TcpOptions { ReceiveQueueBytes = 12 });
+            var disconnected = new TaskCompletionSource<RpcDisconnectReason>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            connection.Disconnected += reason => disconnected.TrySetResult(reason);
+
+            // Two 7-byte frames exceed the 12-byte receive queue limit.
+            byte[] first = Frame(1, 2, 3);
+            byte[] second = Frame(4, 5, 6);
+            byte[] combined = new byte[first.Length + second.Length];
+            first.CopyTo(combined, 0);
+            second.CopyTo(combined, first.Length);
+
+            await server.SendAsync(combined, SocketFlags.None);
+            bool more = await connection.ReceiveOnceAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+            Assert.False(more);
+            Assert.Equal(
+                RpcDisconnectReason.BacklogLimit,
+                await disconnected.Task.WaitAsync(TimeSpan.FromSeconds(10)));
+            Assert.False(connection.IsConnected);
+            Assert.Equal(1, connection.Stats.PacketsReceived);
+        }
+    }
+
     // A settable monotonic timestamp source. Tests advance it to cross the
     // decoder idle period.
     private sealed class FakeClock

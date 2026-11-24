@@ -77,7 +77,7 @@ data.
 | `WriteError` | A socket write failed. |
 | `IdleTimeout` | No bytes arrived within `TcpOptions.IdleTimeout`. |
 | `HandshakeFailed` | The handshake failed or passed its deadline. |
-| `BacklogLimit` | The outbound backlog stayed above its threshold for too long. |
+| `BacklogLimit` | The outbound backlog stayed above its threshold for too long, or the early receive queue passed `ReceiveQueueBytes`. |
 | `LocalClose` | The local host called `Close`. |
 | `ProtocolViolation` | The peer broke the framing or protocol rules. |
 
@@ -137,6 +137,7 @@ The TCP transport options live in
 | `HandshakeTimeout` | 10 seconds | The deadline for one handshake. Zero or negative disables it. |
 | `IdleTimeout` | `0` (disabled) | Closes the connection when no bytes arrive for this period. Zero or negative disables it. |
 | `ReceiveBufferBytes` | 65,536 | The receive buffer size per read. The receive loop rents it per read. |
+| `ReceiveQueueBytes` | 1,048,576 | The largest buffered receive bytes before a `FrameReceived` subscriber attaches. Must be positive. |
 | `DecoderIdleShrinkAfter` | 30 seconds | The decoder shrinks to its start size after this idle period. Zero or negative disables it. |
 | `SendQueueBytes` | 1,048,576 | The largest queued send bytes for one connection. A full queue rejects the send. |
 | `SendBacklogDisconnectBytes` | `0` (disabled) | The queued send bytes that start the backlog window. Must not exceed `SendQueueBytes`. |
@@ -162,6 +163,11 @@ the connect passes `ConnectTimeout`. The listener binds `BindAddress`.
 The idle timeout measures received bytes, not sent bytes. A send-only
 consumer must send keepalives or disable the key. A silent peer closes with
 `IdleTimeout`.
+
+The connection buffers any frame that arrives before `FrameReceived` has a
+subscriber, in arrival order, up to `ReceiveQueueBytes`. The first subscriber
+drains every buffered frame before later frames arrive. Exceeding
+`ReceiveQueueBytes` closes the connection with `BacklogLimit`.
 
 ## RpcPeer
 
