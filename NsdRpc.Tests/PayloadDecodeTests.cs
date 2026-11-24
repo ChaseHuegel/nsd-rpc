@@ -129,25 +129,17 @@ public sealed class PayloadDecodeTests
         };
 
         var listener = new CaptureListener();
-        SourceLevels previous = RpcLog.Source.Switch.Level;
-        RpcLog.Source.Switch.Level = SourceLevels.Warning;
-        RpcLog.Source.Listeners.Add(listener);
-        try
-        {
-            var notification = new Envelope(
-                1, (byte)RpcMessageKind.Notification, 0UL, Method, [0, 0], null);
-            RpcTestHelpers.Deliver(peer, in notification);
-            await gate.Task;
+        using RpcLogScope scope =
+            RpcLogScope.WithLevelAndListener(SourceLevels.Warning, listener);
 
-            Assert.Contains("Dropped frame: notification payload did not decode", listener.Text);
-            Assert.Empty(connection.SentFrames);
-            Assert.True(connection.IsConnected);
-        }
-        finally
-        {
-            RpcLog.Source.Listeners.Remove(listener);
-            RpcLog.Source.Switch.Level = previous;
-        }
+        var notification = new Envelope(
+            1, (byte)RpcMessageKind.Notification, 0UL, Method, [0, 0], null);
+        RpcTestHelpers.Deliver(peer, in notification);
+        await gate.Task;
+
+        Assert.Contains("Dropped frame: notification payload did not decode", listener.Text);
+        Assert.Empty(connection.SentFrames);
+        Assert.True(connection.IsConnected);
     }
 
     [Fact]

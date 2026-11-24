@@ -8,6 +8,7 @@ add or work an issue.
 
 ### Bug
 
+- [x] [Tests race the global RpcLog trace switch](/docs/issues/0068-rpc-log-trace-switch-race.md) — serialize the tests that change the switch and restore its state.
 - [x] [Connect timeout test assumes TEST-NET-1 is unroutable](/docs/issues/0067-connect-timeout-test-determinism.md) — hold the connect open with a connector seam instead of a routed address.
 - [x] [Canceled inbound entries keep a disposed token source](/docs/issues/0063-canceled-inbound-disposed-source.md) — remove the entry and tolerate the disposed source on disconnect.
 - [x] [Map every payload decode failure to InvalidParams](/docs/issues/0062-decode-failure-mapping.md) — a corrupt payload must not look like a handler failure.

@@ -22,11 +22,19 @@ tests.
 - Name tests by behavior. Example: `HandshakeRoundTripsBoundaryValues`.
 - Use Arrange/Act/Assert. One test proves one behavior.
 - Tests are the first consumer of the public API. Write them to be read.
+- Change process-global state only through a scope that restores it. The
+  `RpcLog.Source` switch and listener list are process-global. Use
+  `RpcLogScope` for them.
 
 ## Structure
 
 - One test class per type under test, in `NsdRpc.Tests/`.
 - Shared helpers stay internal to the test project.
+- The test assembly runs collections in sequence. Several tests change the
+  process-global `RpcLog.Source` switch and listener set, and the allocation
+  tests read them. See [AssemblyInfo.cs](../NsdRpc.Tests/AssemblyInfo.cs:6).
+- [RpcLogScope.cs](../NsdRpc.Tests/RpcLogScope.cs:7) snapshots the switch
+  level and the listener set. It restores both when a test ends.
 
 ## What not to write
 
@@ -66,6 +74,9 @@ The engine tests pin the protocol rules in
   disposed cancellation sources, streaming, the `TryStream` result, the log
   sink, the peer close, keep-alive, the malformed frame and envelope rules, the
   drop-and-log rules, the dispatch fallbacks, and the argument guards.
+- [RpcLogTests.cs](../NsdRpc.Tests/RpcLogTests.cs:8) pins the trace switch
+  guard, the drop and error text, the log sink fallback, a contained sink
+  failure, and the allocation split with tracing off and on.
 - [PayloadDecodeTests.cs](../NsdRpc.Tests/PayloadDecodeTests.cs:9) pins the
   decode boundary: a reader failure maps to `InvalidParams` for a request,
   a drop and log for a notification, and a failed call for a chunk. The
@@ -112,6 +123,9 @@ allocations and the bound.
 | Envelope span round trip, payload | `EnvelopeSpanRoundTripWithAPayloadAllocatesOnlyThePayload` | The payload copy only. |
 | Peer invoke setup | `InvokeSetupAllocatesThePendingCallAndThePayload` | The payload, the pending call, the completion source, the task, and the send drain state machine. |
 | Chunk dispatch | `ChunkDispatchAllocatesNothingBeyondTheCodec` | The codec allocation, measured as a baseline. |
+| Drop with tracing off | `DroppedFrameDoesNotAllocateWhenTracingIsOff` | Zero. The frame reaches `RpcLog.Drop` directly. |
+| Unknown-kind drop with tracing off | `UnknownKindFrameDoesNotBuildTheDropTextWhenTracingIsOff` | Zero. The caller skips the dynamic text. |
+| Drop with tracing on | `DroppedFrameAllocatesWhenTracingIsOn` | The trace write. This control proves the measurement detects it. |
 | TCP rejected send | `RejectedSendDoesNotAllocate` | Zero. |
 | Registry lookup | `TryGetReadsAPublishedSnapshotWithoutAllocating` | Zero. |
 | Dispatch with a token | `DispatchAllocatesOnlyTheCancellationSource` | The cancellation source. |
