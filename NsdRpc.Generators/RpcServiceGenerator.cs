@@ -240,7 +240,11 @@ public sealed class RpcServiceGenerator : IIncrementalGenerator
         IMethodSymbol method, ServiceModel model, ulong methodId, string direction, Location location)
     {
         if (!TryGetReturnShape(
-                method.ReturnType, out CallKind kind, out INamedTypeSymbol? responseType, out INamedTypeSymbol? chunkType))
+                method.ReturnType,
+                out CallKind kind,
+                out INamedTypeSymbol? responseType,
+                out INamedTypeSymbol? chunkType,
+                out bool returnsSendResult))
         {
             model.Diagnostics.Add(Diagnostic.Create(Diagnostics.UnsupportedReturnType, location, method.Name));
             return;
@@ -252,6 +256,7 @@ public sealed class RpcServiceGenerator : IIncrementalGenerator
             MethodId = methodId,
             Direction = direction,
             Kind = kind,
+            ReturnsSendResult = returnsSendResult,
             ResponseType = responseType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) ?? string.Empty,
             ChunkType = chunkType?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
         };
@@ -349,6 +354,15 @@ public sealed class RpcServiceGenerator : IIncrementalGenerator
     private static void BuildHandlerMethod(
         IMethodSymbol method, ServiceModel model, ulong methodId, string direction, string? streamsType, Location location)
     {
+        // A handler runs locally and has no frame to reject, so a bool return
+        // belongs only on the invocation member.
+        if (method.ReturnType.SpecialType == SpecialType.System_Boolean)
+        {
+            model.Diagnostics.Add(Diagnostic.Create(
+                Diagnostics.NotificationHandlerMustBeVoid, location, method.Name));
+            return;
+        }
+
         if (!TryGetHandlerReturn(method.ReturnType, out bool isNotification, out INamedTypeSymbol? responseType))
         {
             model.Diagnostics.Add(Diagnostic.Create(Diagnostics.UnsupportedReturnType, location, method.Name));
@@ -456,15 +470,25 @@ public sealed class RpcServiceGenerator : IIncrementalGenerator
         ITypeSymbol returnType,
         out CallKind kind,
         out INamedTypeSymbol? responseType,
-        out INamedTypeSymbol? chunkType)
+        out INamedTypeSymbol? chunkType,
+        out bool returnsSendResult)
     {
         kind = CallKind.Plain;
         responseType = null;
         chunkType = null;
+        returnsSendResult = false;
 
         if (returnType.SpecialType == SpecialType.System_Void)
         {
             kind = CallKind.Notification;
+            return true;
+        }
+
+        // A bool notification reports whether the peer accepted the frame.
+        if (returnType.SpecialType == SpecialType.System_Boolean)
+        {
+            kind = CallKind.Notification;
+            returnsSendResult = true;
             return true;
         }
 
@@ -676,7 +700,9 @@ public sealed class RpcServiceGenerator : IIncrementalGenerator
     {
         if (method.Kind == CallKind.Notification)
         {
-            sb.Append(indent).Append("    public void ").Append(method.Name).Append('(');
+            string notificationReturn = method.ReturnsSendResult ? "bool" : "void";
+            sb.Append(indent).Append("    public ").Append(notificationReturn).Append(' ')
+                .Append(method.Name).Append('(');
             sb.Append(string.Join(", ", method.ParameterDeclarations));
             sb.AppendLine(")");
             sb.Append(indent).AppendLine("    {");
@@ -684,7 +710,13 @@ public sealed class RpcServiceGenerator : IIncrementalGenerator
                 ? "_caller.Notify(" + method.MethodId + "UL);"
                 : "_caller.Notify<" + method.RequestType + ">(" + method.MethodId + "UL, "
                     + method.RequestRef + method.RequestName + ");";
-            sb.Append(indent).Append("        ").AppendLine(notifyCall);
+            sb.Append(indent).Append("        ");
+            if (method.ReturnsSendResult)
+            {
+                sb.Append("return ");
+            }
+
+            sb.AppendLine(notifyCall);
             sb.Append(indent).AppendLine("    }");
             return;
         }
@@ -873,6 +905,8 @@ public sealed class RpcServiceGenerator : IIncrementalGenerator
         public bool IsHandler { get; set; }
 
         public bool IsNotification { get; set; }
+
+        public bool ReturnsSendResult { get; set; }
 
         public CallKind Kind { get; set; }
 

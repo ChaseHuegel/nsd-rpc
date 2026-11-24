@@ -261,6 +261,7 @@ Reference `NsdRpc.Generators` as an analyzer and mark an interface with
 | No `RpcContext` | Invocation | `Task<RpcResult<T>>` | A plain call on `{Name}Client`. |
 | No `RpcContext` | Invocation | `RpcStreamSession<TChunk, T>` or `Task<RpcResult<T>>` with `IChunkSink<TChunk>` | A stream call on `{Name}Client`. |
 | No `RpcContext` | Invocation | `void` | A notification on `{Name}Client`. |
+| No `RpcContext` | Invocation | `bool` | A notification on `{Name}Client` that returns the send result. |
 | With `RpcContext` | Handler | `ValueTask<RpcResult<T>>` | A virtual member on `{Name}Handler`. |
 | With `RpcContext` | Handler | `void` | A virtual notification member on `{Name}Handler`. |
 

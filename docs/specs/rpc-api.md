@@ -517,8 +517,13 @@ RpcResult<ListUsersResponse> result = await chat.ListUsersAsync(new ListUsersReq
 
 Invocation shapes are the same as before: `Task<RpcResult<T>>` is a plain
 call, `RpcStreamSession<TChunk, T>` is a stream, the `IChunkSink<TChunk>`
-overload is the callback stream, and `void` is a notification. A handler
-shape is `ValueTask<RpcResult<T>>` for a call and `void` for a notification.
+overload is the callback stream, and `void` or `bool` is a notification. A
+`bool` notification member returns the result of `IRpcCaller.Notify`: `true`
+when the peer accepts the frame and `false` when it rejects the frame. A handler
+shape is `ValueTask<RpcResult<T>>` for a call and `void` for a notification. A
+notification handler cannot return `bool`, because it runs locally and has no
+frame to reject.
+
 The handler's `Streams` declares the chunk type; the generator cross-checks
 it against the client's chunk type when both shapes share an id. A generated
 type implements the interface only when the interface is single-role; a

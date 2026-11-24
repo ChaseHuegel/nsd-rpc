@@ -14,6 +14,7 @@ add or work an issue.
 
 ### Improvement
 
+- [x] [Notification proxies discard the send result](/docs/issues/0066-notification-send-result.md) — a `bool` notification proxy returns the send result.
 - [x] [Reliable send queue with a backlog policy](/docs/issues/0056-send-backlog-policy.md) — never drop an accepted frame, close a peer that cannot drain.
 - [x] [Idle timeout and disconnect reasons](/docs/issues/0057-idle-timeout-and-reasons.md) — detect a half-open peer and report why it closed.
 - [x] [Connection metrics](/docs/issues/0058-connection-metrics.md) — frames, bytes, queue depth, and rejected sends.
